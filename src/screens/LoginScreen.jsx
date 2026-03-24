@@ -35,8 +35,32 @@ function LoginScreen({ navigate, state, setState }) {
     // We no longer rely on hardcoded ADMIN_SECRET text to force admin mode.
     // Instead, admin status is evaluated post-lookup.
 
-    // It must be a phone number - validate 11 digits
     const cleanPhone = input.replace(/\D/g, '');
+    
+    // ── HARDCODED DEMO ACCOUNT BYPASS ──
+    if (cleanPhone === '01000000000') {
+      setLoading(true);
+      setTimeout(() => {
+        const demoUser = {
+          phone: '01000000000',
+          name: 'Guest Tester',
+          first: 'Guest',
+          last: 'Tester',
+          role: 'user',
+          status: 'verified',
+          paymentMethod: { type: 'Vodafone Cash', number: '01012345678' },
+          balance: 100.00,
+          profilePic: ""
+        };
+        setState(s => ({ ...s, user: demoUser, isAdminMode: false }));
+        localStorage.setItem('bike_app_user', JSON.stringify(demoUser));
+        localStorage.setItem('admin_mode', 'false');
+        setLoading(false);
+        navigate('map');
+      }, 1000);
+      return;
+    }
+
     if (!/^[0-9]{11}$/.test(cleanPhone)) {
       setError("Invalid Phone Number");
       return;
@@ -210,9 +234,11 @@ function LoginScreen({ navigate, state, setState }) {
                   value={phone}
                   onChange={e => { setPhone(e.target.value); setError(""); }}
                   type="text"
-                  autoComplete="off"
                   disabled={loading}
                 />
+                <p style={{ fontSize: 11, color: "#888", marginTop: 6, fontStyle: "italic" }}>
+                  For testing, use <span style={{ fontWeight: 700, color: DARK }}>01000000000</span> / <span style={{ fontWeight: 700, color: DARK }}>123456</span>
+                </p>
               </div>
               {error && <div style={{ color: "#FF3B30", fontSize: 13, display: "flex", alignItems: "center", gap: 6 }}><Icons.AlertIcon size={16} /> {error}</div>}
             </>

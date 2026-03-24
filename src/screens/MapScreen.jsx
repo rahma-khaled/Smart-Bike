@@ -74,9 +74,9 @@ function MapScreen({ navigate, state, setState }) {
   }, [state.bikes, userLocation]);
 
   return (
-    <div style={{ height: "100%", display: "flex", flexDirection: "column", position: "relative" }}>
-      {/* Real Leaflet Map */}
-      <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: "100%", zIndex: 0 }}>
+    <div style={{ height: "100%", display: "flex", flexDirection: "column", background: "#fff" }}>
+      {/* 60% Map Height */}
+      <div style={{ flex: selectedBike !== null ? 6 : 1, position: "relative", zIndex: 0 }}>
         <LeafletMap bikes={displayBikes} onBikeClick={i => setSelectedBike(i)} selectedBike={selectedBike} userLocation={userLocation} />
       </div>
 
@@ -143,9 +143,9 @@ function MapScreen({ navigate, state, setState }) {
         </button>
       </div>
 
-      {/* Bottom CTA */}
       {selectedBike === null ? (
-        <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, padding: "0 16px 32px", zIndex: 10 }}>
+        <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, padding: "0 16px 32px", zIndex: 10, display: "flex", justifyContent: "center" }}>
+          {/* ... (content remains) */}
           {(() => {
               const closestBikeDist = userLocation && displayBikes.length > 0 
                 ? Math.min(...displayBikes.map(b => calculateDistance(userLocation.lat, userLocation.lng, b.lat, b.lng))) 
@@ -157,7 +157,7 @@ function MapScreen({ navigate, state, setState }) {
                 className="btn-primary" 
                 disabled={!anyNear}
                 style={{ 
-                  display: "flex", alignItems: "center", justifyContent: "center", gap: 8, boxShadow: "0 4px 20px rgba(0,0,0,0.2)",
+                  boxShadow: "0 4px 20px rgba(0,0,0,0.2)",
                   background: anyNear ? LIME : "#444", color: anyNear ? DARK : "#888", cursor: anyNear ? "pointer" : "not-allowed"
                 }} 
                 onClick={() => {
@@ -167,44 +167,35 @@ function MapScreen({ navigate, state, setState }) {
                 }}
               >
                 <Icons.QRScanIcon size={18} color={anyNear ? DARK : "#888"} /> 
-                {anyNear ? "Scan To Ride" : `Too far from any bike (${closestBikeDist > 1000 ? (closestBikeDist/1000).toFixed(1)+'km' : closestBikeDist+'m'})`}
+                {anyNear ? "Scan To Ride" : `Too far (${closestBikeDist > 1000 ? (closestBikeDist/1000).toFixed(1)+'km' : closestBikeDist+'m'})`}
               </button>
             );
           })()}
         </div>
       ) : (
-        <div className="bottom-sheet" style={{ zIndex: 10 }}>
-          <div className="sheet-handle" />
+        <div style={{ flex: 4, background: "#fff", borderTop: "1px solid #eee", padding: "16px 20px env(safe-area-inset-bottom, 40px)", zIndex: 10, display: "flex", flexDirection: "column", boxShadow: "0 -4px 20px rgba(0,0,0,0.05)" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
             <div>
               <div style={{ fontWeight: 800, fontSize: 18, fontFamily: "'Space Grotesk',sans-serif" }}>Bike #{displayBikes[selectedBike]?.id || ''}</div>
               <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 6 }}>
-                <span style={{ color: "#888", fontSize: 14, display: "flex", alignItems: "center", gap: 6 }}>
+                <span style={{ color: "#888", fontSize: 13, display: "flex", alignItems: "center", gap: 6 }}>
                   <Icons.BatteryIconSVG size={16} color="#888" /> {displayBikes[selectedBike]?.battery} battery
                 </span>
-                <span style={{ color: "#888", fontSize: 14, display: "flex", alignItems: "center", gap: 6 }}>
+                <span style={{ color: "#888", fontSize: 13, display: "flex", alignItems: "center", gap: 6 }}>
                   <Icons.PadlockIcon size={16} color="#888" /> {displayBikes[selectedBike]?.status || ''}
                 </span>
-                
-                {/* Admin Mode Only -> Technical Info */}
-                {state.user?.role === 'super_admin' && (
-                  <span style={{ color: "#FF3B30", fontSize: 12, display: "flex", alignItems: "center", gap: 6, marginTop: 4 }}>
-                    <Icons.AlertIcon size={14} color="#FF3B30" /> 
-                    COORD: {displayBikes[selectedBike]?.lat?.toFixed(5)}, {displayBikes[selectedBike]?.lng?.toFixed(5)}
-                  </span>
-                )}
               </div>
             </div>
             <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8 }}>
-              <div style={{ width: 52, height: 52, background: "#f5f5f5", borderRadius: 14, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <Icons.BikeIconSVG size={36} color={DARK} />
+              <div style={{ width: 44, height: 44, background: "#f5f5f5", borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <Icons.BikeIconSVG size={32} color={DARK} />
               </div>
               <button style={{ background: "none", border: "none", cursor: "pointer", color: "#888", display: 'flex' }} onClick={() => setSelectedBike(null)}>
                 <Icons.XIcon size={20} color="#888" />
               </button>
             </div>
           </div>
-          <div style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 10 }}>
+          <div style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 8, flex: 1, justifyContent: "flex-end" }}>
             {(() => {
               const bike = displayBikes[selectedBike];
               const dist = (userLocation && bike?.lat && bike?.lng)
@@ -217,8 +208,8 @@ function MapScreen({ navigate, state, setState }) {
 
               if (!isVodafoneLinked) {
                 return (
-                  <button className="btn-primary" style={{ background: "#f39c12", color: "#111", border: "none", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }} onClick={() => navigate("editProfile")}>
-                    <Icons.PhoneIcon size={18} color="#111" /> Add Vodafone Cash to Unlock
+                  <button className="btn-primary" style={{ background: "#f39c12", color: "#111" }} onClick={() => navigate("editProfile")}>
+                    <Icons.PhoneIcon size={18} color="#111" /> Link Vodafone Cash
                   </button>
                 );
               }
@@ -227,37 +218,27 @@ function MapScreen({ navigate, state, setState }) {
                 <button 
                   className="btn-primary" 
                   disabled 
-                  style={{ width: "100%", background: "#444", color: "#888", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, cursor: "not-allowed" }}
                 >
                   <Icons.QRScanIcon size={18} color="#888" /> 
-                  Advance closer to unlock ({(dist/1000).toFixed(2)}km away)
+                  Move Closer ({(dist/1000).toFixed(2)}km)
                 </button>
               ) : (
-                <button className="btn-primary" style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }} onClick={() => {
-                  setState(s => ({ ...s, selectedBike: bike })); // pass explicitly so scanner doesn't guess
-                  if (bike.id === 'B-LOCAL' || bike.id === 'B-TEST') {
-                    // Force straight to scanner per rule
-                    return navigate("scanQR");
-                  }
+                <button className="btn-primary" onClick={() => {
+                  setState(s => ({ ...s, selectedBike: bike }));
                   navigate("scanQR");
                 }}>
-                  <Icons.QRScanIcon size={18} color={DARK} /> Scan To Unlock (<Icons.CheckIcon size={14} /> Near)
+                  <Icons.QRScanIcon size={18} color={DARK} /> Scan To Unlock
                 </button>
               );
             })()}
 
-            {/* Reservation is REMOTE: allowed from anywhere! */}
-            {!(state.user?.paymentMethod?.type === 'Vodafone Cash' && state.user?.paymentMethod?.number) ? (
-              <button className="btn-outline" style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, borderColor: "#f39c12", color: "#f39c12" }} onClick={() => navigate("editProfile")}>
-                <Icons.PhoneIcon size={18} color="#f39c12" /> Add Vodafone Cash to Reserve
-              </button>
-            ) : (
-              <button className="btn-outline" onClick={() => { 
-                  if (displayBikes[selectedBike]) {
-                    setState(s => ({ ...s, selectedBike: displayBikes[selectedBike] })); 
-                    navigate("reserve"); 
-                  }
-                }}>Reserve (Remote Hold)</button>
+            {isVodafoneLinked && (
+               <button className="btn-outline" style={{ border: 'none', color: '#888', fontWeight: 700, fontSize: 13 }} onClick={() => { 
+                if (displayBikes[selectedBike]) {
+                  setState(s => ({ ...s, selectedBike: displayBikes[selectedBike] })); 
+                  navigate("reserve"); 
+                }
+              }}>Reserve (Hold 15 mins)</button>
             )}
           </div>
         </div>

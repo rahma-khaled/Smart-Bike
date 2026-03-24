@@ -42,72 +42,79 @@ function RidingScreen({ navigate, state, setState }) {
   const fmt = s => `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
 
   return (
-    <div style={{ height: "100%", position: "relative" }}>
-      <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: "100%", zIndex: 0 }}>
+    <div style={{ height: "100%", display: "flex", flexDirection: "column", background: "#fff" }}>
+      {/* 1. Map Header (40% height) */}
+      <div style={{ height: "40%", position: "relative", zIndex: 0 }}>
         <LeafletMap bikes={[]} />
-      </div>
-      <div style={{ position: "absolute", top: 14, left: 0, right: 0, padding: "0 16px", display: "flex", justifyContent: "space-between", alignItems: "center", zIndex: 10 }}>
-        <button style={{ width: 40, height: 40, borderRadius: 12, background: "white", border: "none", cursor: "pointer", display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <Icons.MenuIcon size={20} color={DARK} />
-        </button>
-        <div style={{ background: LIME, borderRadius: 50, padding: "10px 20px", display: "flex", alignItems: "center", gap: 8, fontWeight: 700, fontSize: 15, fontFamily: "'Space Grotesk',sans-serif" }}>
-          <span style={{ width: 8, height: 8, background: DARK, borderRadius: "50%", display: "inline-block" }} />
-          Ride in Progress
+        <div style={{ position: "absolute", top: 14, left: 16, right: 16, display: "flex", justifyContent: "space-between", alignItems: "center", zIndex: 10 }}>
+          <button style={{ width: 40, height: 40, borderRadius: 12, background: "white", border: "none", cursor: "pointer", display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 10px rgba(0,0,0,0.1)' }}>
+            <Icons.MenuIcon size={20} color={DARK} />
+          </button>
+          <div style={{ background: LIME, borderRadius: 50, padding: "8px 16px", display: "flex", alignItems: "center", gap: 8, fontWeight: 700, fontSize: 13, fontFamily: "'Space Grotesk',sans-serif", boxShadow: '0 2px 10px rgba(0,0,0,0.1)' }}>
+            <span style={{ width: 6, height: 6, background: DARK, borderRadius: "50%", display: "inline-block" }} />
+            Ride Active
+          </div>
         </div>
       </div>
-      <div style={{ position: "absolute", top: 80, left: 16, right: 16, background: "white", borderRadius: 20, padding: 16, boxShadow: "0 4px 20px rgba(0,0,0,0.12)", zIndex: 10 }}>
-        <div style={{ display: "flex", gap: 16 }}>
-          <div style={{ flex: 1 }}>
-            <div style={{ color: "#888", fontSize: 12, fontWeight: 600 }}>Elapsed Time</div>
-            <div style={{ fontSize: 22, fontWeight: 800, fontFamily: "'Space Grotesk',sans-serif", color: DARK }}>{fmt(elapsedSeconds)}</div>
-          </div>
-          <div style={{ width: 1, background: "#eee" }} />
-          <div style={{ flex: 1 }}>
-            <div style={{ color: "#888", fontSize: 12, fontWeight: 600 }}>Est. Cost (0.50/min)</div>
-            <div style={{ fontSize: 22, fontWeight: 800, fontFamily: "'Space Grotesk',sans-serif" }}>
-              {(Math.ceil((elapsedSeconds / 60) * 0.50 * 100) / 100).toFixed(2)} <span style={{fontSize:12, fontWeight:600}}>EGP</span>
+
+      {/* 2. Scrollable Body Content */}
+      <div style={{ flex: 1, overflowY: "auto", padding: "20px 16px 120px", display: "flex", flexDirection: "column", gap: 20 }}>
+        <div style={{ background: "white", borderRadius: 20, padding: 16, border: "1px solid #eee", boxShadow: "0 4px 15px rgba(0,0,0,0.05)" }}>
+          <div style={{ display: "flex", gap: 16 }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ color: "#888", fontSize: "0.8rem", fontWeight: 600 }}>Duration</div>
+              <div style={{ fontSize: "1.5rem", fontWeight: 800, fontFamily: "'Space Grotesk',sans-serif", color: DARK }}>{fmt(elapsedSeconds)}</div>
+            </div>
+            <div style={{ width: 1, background: "#eee" }} />
+            <div style={{ flex: 1 }}>
+              <div style={{ color: "#888", fontSize: "0.8rem", fontWeight: 600 }}>Total Cost</div>
+              <div style={{ fontSize: "1.5rem", fontWeight: 800, fontFamily: "'Space Grotesk',sans-serif" }}>
+                {(Math.ceil((elapsedSeconds / 60) * 0.50 * 100) / 100).toFixed(2)} <span style={{fontSize:12, fontWeight:600}}>EGP</span>
+              </div>
             </div>
           </div>
+          <div className="ride-progress-bar" style={{ marginTop: 12, height: 4, background: '#eee', borderRadius: 2, overflow: 'hidden' }}>
+            <div className="ride-progress-fill" style={{ width: "100%", height: '100%', background: LIME, transformOrigin: "left", animation: "pulse 2s infinite ease-in-out" }} />
+          </div>
         </div>
-        <div className="ride-progress-bar" style={{ marginTop: 12 }}>
-          {/* Animated pulse line for active ride */}
-          <div className="ride-progress-fill" style={{ width: "100%", transformOrigin: "left", animation: "pulse 2s infinite ease-in-out" }} />
+
+        <div style={{ display: "flex", gap: 12, alignItems: 'center' }}>
+           <button className="emergency-btn" style={{ width: 50, height: 50, borderRadius: 14, background: '#f5f5f5', border: 'none' }} onClick={() => setShowShare(true)}>
+             <Icons.ExternalLinkIcon size={20} color={DARK} />
+           </button>
+           <div style={{ fontSize: 13, color: '#888', fontWeight: 600 }}>Share live ride location</div>
         </div>
-      </div>
-      <div style={{ position: "absolute", bottom: "120px", left: 16, zIndex: 10 }}>
-        <button className="emergency-btn" onClick={() => setShowShare(true)}>
-          <Icons.ExternalLinkIcon size={20} color={DARK} />
-        </button>
-      </div>
-      <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, padding: "0 16px 32px", display: "flex", flexDirection: "column", gap: 10, zIndex: 10 }}>
-        <button className="btn-danger" onClick={() => {
-          setCheckingZone(true);
-          setTimeout(() => {
-            setCheckingZone(false);
-            setShowEndConfirm(true);
-          }, 1500);
-        }} disabled={checkingZone}>
-          {checkingZone ? "Verifying GPS Parking Zone..." : "Unlock & End Ride"}
-        </button>
-        <button className="btn-outline" style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, background: "white", borderColor: "#FF3B30", color: "#FF3B30", fontWeight: 700 }} onClick={async () => {
-           const lat = state.userLocation?.lat || 0;
-           const lng = state.userLocation?.lng || 0;
-           console.log(`[ADMIN_LOG] EMERGENCY SOS at [${lat}, ${lng}]`);
-           try {
-             const logs = await localforage.getItem('admin_logs') || [];
-             logs.unshift({
-               timestamp: new Date().toISOString(),
-               operator: state.user?.name || state.user?.phone || 'Unknown User',
-               action: 'EMERGENCY SOS TRIGGERED',
-               details: `Coordinates: [${lat}, ${lng}]`,
-               isSystem: true
-             });
-             await localforage.setItem('admin_logs', logs);
-           } catch(e) { console.error('Failed to log SOS', e); }
-           setShowEmergency(true);
-        }}>
-          <Icons.ShieldAlertIcon size={18} color="#FF3B30" /> EMERGENCY SOS
-        </button>
+        <div style={{ marginTop: "auto", display: "flex", flexDirection: "column", gap: 12 }}>
+          <button className="btn-primary" style={{ background: '#FF3B30', color: 'white', margin: '0' }} onClick={() => {
+            setCheckingZone(true);
+            setTimeout(() => {
+              setCheckingZone(false);
+              setShowEndConfirm(true);
+            }, 1500);
+          }} disabled={checkingZone}>
+            {checkingZone ? "Verifying GPS Zone..." : "End Ride & Lock"}
+          </button>
+          
+          <button className="btn-outline" style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, background: "white", borderColor: "#FF3B30", color: "#FF3B30", fontWeight: 700, margin: '0' }} onClick={async () => {
+             const lat = state.userLocation?.lat || 0;
+             const lng = state.userLocation?.lng || 0;
+             console.log(`[ADMIN_LOG] EMERGENCY SOS at [${lat}, ${lng}]`);
+             try {
+               const logs = await localforage.getItem('admin_logs') || [];
+               logs.unshift({
+                 timestamp: new Date().toISOString(),
+                 operator: state.user?.name || state.user?.phone || 'Unknown User',
+                 action: 'EMERGENCY SOS TRIGGERED',
+                 details: `Coordinates: [${lat}, ${lng}]`,
+                 isSystem: true
+               });
+               await localforage.setItem('admin_logs', logs);
+             } catch(e) { console.error('Failed to log SOS', e); }
+             setShowEmergency(true);
+          }}>
+            <Icons.ShieldAlertIcon size={18} color="#FF3B30" /> EMERGENCY SOS
+          </button>
+        </div>
       </div>
 
       {showEmergency && (

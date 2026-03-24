@@ -77,7 +77,7 @@ function LiveMap({ bikes = [] }) {
           ))}
         </div>
       </div>
-      <div ref={mapRef} style={{ height: 340 }} />
+      <div ref={mapRef} style={{ height: '40vh', minHeight: '300px' }} />
     </div>
   );
 }

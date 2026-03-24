@@ -37,9 +37,9 @@ function RideCompleteScreen({ navigate, state }) {
   const ride = state?.user?.currentRide || { elapsedSeconds: 0, cost: "0.00" };
   const fmt = s => `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
   return (
-    <div style={{ minHeight: "100%", background: "white" }}>
+    <div style={{ height: "100%", display: "flex", flexDirection: "column", background: "white" }}>
       <StatusBar />
-      <div style={{ padding: "8px 24px 32px" }}>
+      <div style={{ flex: 1, overflowY: "auto", padding: "8px 20px 100px" }}>
         <div style={{ textAlign: "center", padding: "20px 0 24px" }}>
           <div className="success-circle" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <Icons.CheckIcon size={40} color={DARK} />
@@ -76,7 +76,7 @@ function RideCompleteScreen({ navigate, state }) {
             <div style={{ color: "#888", fontSize: 12, marginTop: 2 }}>Please confirm that the bike has no damage and is properly parked</div>
           </div>
         </div>
-        <button className="btn-primary" onClick={() => navigate("payment")}>Proceed To Payment</button>
+        <button className="btn-primary" style={{ marginTop: 20 }} onClick={() => navigate("payment")}>Proceed To Payment</button>
       </div>
     </div>
   );

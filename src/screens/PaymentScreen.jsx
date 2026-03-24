@@ -10,9 +10,9 @@ function PaymentScreen({ navigate, state }) {
   const ride = state?.user?.currentRide || { elapsedSeconds: 0, cost: "0.00" };
   const vCashNumber = state?.user?.paymentMethod?.number || "Not Linked";
   return (
-    <div style={{ minHeight: "100%", background: "white" }}>
+    <div style={{ height: "100%", display: "flex", flexDirection: "column", background: "white" }}>
       <StatusBar />
-      <div style={{ padding: "8px 24px 32px" }}>
+      <div style={{ flex: 1, overflowY: "auto", padding: "8px 20px 100px" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 24 }}>
           <BackBtn onBack={() => navigate("rideComplete")} />
           <div className="page-title">Payment</div>
@@ -50,7 +50,7 @@ function PaymentScreen({ navigate, state }) {
             + Change Vodafone Number
           </button>
         </div>
-        <button className="btn-primary" onClick={() => navigate("paymentSuccess")}>Continue To Payment</button>
+        <button className="btn-primary" style={{ marginTop: 20 }} onClick={() => navigate("paymentSuccess")}>Continue To Payment</button>
       </div>
     </div>
   );

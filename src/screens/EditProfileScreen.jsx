@@ -16,9 +16,9 @@ function EditProfileScreen({ navigate, state, setState }) {
   });
 
   return (
-    <div style={{ minHeight: "100%", background: "white" }}>
+    <div style={{ height: "100%", display: "flex", flexDirection: "column", background: "white" }}>
       <StatusBar />
-      <div style={{ padding: "8px 24px 32px" }}>
+      <div style={{ flex: 1, overflowY: "auto", padding: "8px 20px 100px" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
           <BackBtn onBack={() => navigate("map")} />
           <div className="page-title">Edit Profile</div>
@@ -70,15 +70,10 @@ function EditProfileScreen({ navigate, state, setState }) {
 
         <div style={{ marginTop: 24 }}>
           <button className="btn-primary" onClick={async () => {
+            // ... (save logic)
             const updatedUser = { ...state.user, ...form };
-            
-            // 1. Update State
             setState(s => ({ ...s, user: updatedUser }));
-            
-            // 2. Update LocalStorage Sync
             localStorage.setItem('bike_app_user', JSON.stringify(updatedUser));
-            
-            // 3. Update global IndexedDB database
             try {
               const appUsers = await localforage.getItem('app_users') || [];
               const userIdx = appUsers.findIndex(u => u.phone === state.user.phone);
@@ -86,12 +81,9 @@ function EditProfileScreen({ navigate, state, setState }) {
                 appUsers[userIdx] = { ...appUsers[userIdx], ...updatedUser };
                 await localforage.setItem('app_users', appUsers);
               }
-            } catch(e) {
-              console.error("Failed to commit profile edit to DB:", e);
-            }
-            
+            } catch(e) { console.error("Failed to commit profile edit to DB:", e); }
             navigate("profile");
-          }}>Save Profile</button>
+          }}>Save Profile Changes</button>
         </div>
       </div>
     </div>

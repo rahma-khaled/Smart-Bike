@@ -1,13 +1,14 @@
 import React, { useState, useEffect, useRef } from "react";
 import { LIME, DARK } from '../../constants/theme.js';
 import * as Icons from '../../assets/Icons.jsx';
-import { DAMIETTA_BIKES, DAMIETTA_GEOFENCE, pointInPolygon } from './geofence';
+import { DAMIETTA_BIKES, DAMIETTA_CENTER, DAMIETTA_RADIUS, isWithinServiceZone } from './geofence';
 
 export default
   function LeafletMap({ bikes = [], onBikeClick, selectedBike, userLocation }) {
   const mapRef = useRef(null);
   const mapInstanceRef = useRef(null);
   const markersRef = useRef([]);
+  const [isOutside, setIsOutside] = useState(false);
   const geofenceAlertedRef = useRef(false);
 
   useEffect(() => {
@@ -39,25 +40,26 @@ export default
           maxZoom: 19,
         }).addTo(map);
 
-        // Draw geofence polygon
-        L.polygon(DAMIETTA_GEOFENCE, {
+        // Draw expanded 20km geofence circle
+        L.circle([DAMIETTA_CENTER.lat, DAMIETTA_CENTER.lng], {
+          radius: DAMIETTA_RADIUS,
           color: LIME,
-          weight: 3,
+          weight: 2,
           fillColor: LIME,
-          fillOpacity: 0.08,
-          dashArray: '6,6',
-        }).addTo(map).bindTooltip('Damietta Service Zone', {
+          fillOpacity: 0.05,
+          dashArray: '10,10',
+        }).addTo(map).bindTooltip('20KM Primary Service Zone', {
           permanent: false,
           direction: 'center',
           className: 'geofence-tooltip',
         });
-
-        // Add "Service Zone" label in center
-        L.marker([31.4200, 31.8100], {
+        
+        // Add "Primary Service Zone" label in center
+        L.marker([DAMIETTA_CENTER.lat, DAMIETTA_CENTER.lng], {
           icon: L.divIcon({
             className: '',
-            html: `<div style="background:${LIME};color:#111;font-size:11px;font-weight:700;padding:4px 10px;border-radius:20px;font-family:'Space Grotesk',sans-serif;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,0.2);border:1.5px solid #111;">Damietta Service Zone</div>`,
-            iconAnchor: [70, 10],
+            html: `<div style="background:${LIME};color:#111;font-size:11px;font-weight:700;padding:4px 10px;border-radius:20px;font-family:'Space Grotesk',sans-serif;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,0.2);border:1.5px solid #111;">Primary Service Zone</div>`,
+            iconAnchor: [60, 10],
           })
         }).addTo(map);
 
@@ -114,12 +116,16 @@ export default
           .addTo(map)
           .on('click', () => onBikeClick && onBikeClick(i));
 
-        // Check if outside geofence
-        if (!pointInPolygon(lat, lng, DAMIETTA_GEOFENCE) && !geofenceAlertedRef.current) {
-          geofenceAlertedRef.current = true;
-          setTimeout(() => {
-            alert('Outside Service Zone – Please return to Damietta area to avoid fines.');
-          }, 500);
+        // Check if user is outside geofence (Non-intrusive)
+        if (userLocation && !isWithinServiceZone(userLocation.lat, userLocation.lng)) {
+          if (!isOutside) setIsOutside(true);
+          if (!geofenceAlertedRef.current) {
+            console.warn("[Admin Log] User outside zone:", userLocation);
+            geofenceAlertedRef.current = true;
+          }
+        } else if (isOutside) {
+          setIsOutside(false);
+          geofenceAlertedRef.current = false;
         }
         markersRef.current.push(marker);
       });
@@ -166,9 +172,35 @@ export default
   }, []);
 
   return (
-    <div
-      ref={mapRef}
-      style={{ width: '100%', height: '100%', background: '#e8eaf0' }}
-    />
+    <>
+      {/* Non-intrusive Outside Zone Banner */}
+      {isOutside && (
+        <div style={{
+          position: "absolute",
+          top: 12,
+          left: "50%",
+          transform: "translateX(-50%)",
+          zIndex: 1000,
+          background: "rgba(255, 59, 48, 0.95)",
+          color: "white",
+          padding: "8px 16px",
+          borderRadius: 20,
+          fontSize: 11,
+          fontWeight: 700,
+          whiteSpace: "nowrap",
+          boxShadow: "0 4px 12px rgba(0,0,0,0.2)",
+          display: "flex",
+          alignItems: "center",
+          gap: 6
+        }}>
+          <Icons.AlertIcon size={14} color="white" />
+          You are outside the primary zone, extra fees may apply
+        </div>
+      )}
+      <div
+        ref={mapRef}
+        style={{ width: '100%', height: '100%', background: '#e8eaf0' }}
+      />
+    </>
   );
 }

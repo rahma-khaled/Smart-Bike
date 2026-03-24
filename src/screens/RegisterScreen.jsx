@@ -1,0 +1,503 @@
+import React, { useState, useEffect, useRef } from "react";
+import { LIME, DARK } from '../constants/theme.js';
+import * as Icons from '../assets/Icons.jsx';
+import StatusBar from '../components/common/StatusBar';
+import BackBtn from '../components/common/BackBtn';
+import localforage from 'localforage';
+import bcrypt from 'bcryptjs';
+
+export default 
+function RegisterScreen({ navigate, state, setState }) {
+  // INITIAL STATE: Attempt to load from both state AND localStorage
+  const [isEditingExisting, setIsEditingExisting] = useState(false);
+  const [form, setForm] = useState({
+    first: "",
+    middle: "",
+    last: "",
+    nid: "",
+    phone: "",
+    email: "",
+    password: "",
+    confirm: ""
+  });
+  const [errors, setErrors] = useState({});
+  const [socialLoading, setSocialLoading] = useState(false);
+  const [isDuplicatePhone, setIsDuplicatePhone] = useState(false);
+  const [showDuplicateToast, setShowDuplicateToast] = useState(false);
+  const [redirecting, setRedirecting] = useState(false);
+  const [dataLoaded, setDataLoaded] = useState(false);
+
+  // CHECK PENDING STATUS — only redirect if NOT intentionally editing profile
+  useEffect(() => {
+    if (state.user?.status === 'pending' && !state.user?.isEditingProfile) {
+      console.log('User has pending status and is not editing - redirecting to statusDashboard');
+      navigate('statusDashboard');
+    }
+  }, [state.user?.status, state.user?.isEditingProfile, navigate]);
+
+  // MAIN DATA LOADING HOOK - Runs once on mount
+  useEffect(() => {
+    console.log('=== REGISTERSCREEN MOUNT - DATA LOADING STARTING ===');
+    console.log('state.user:', state.user);
+    console.log('localStorage.bike_app_user:', localStorage.getItem('bike_app_user'));
+
+    try {
+      // PRIORITY 1: Check localStorage for saved user (most recent data)
+      const savedUserJSON = localStorage.getItem('bike_app_user');
+      let userData = null;
+
+      if (savedUserJSON) {
+        try {
+          userData = JSON.parse(savedUserJSON);
+          console.log('📦 PREFILL_DEBUG: Data found in localStorage.bike_app_user:', userData);
+        } catch (parseErr) {
+          console.error('❌ Failed to parse localStorage data:', parseErr);
+          userData = null;
+        }
+      }
+
+      // PRIORITY 2: Fall back to state.user if localStorage is empty
+      if (!userData && state.user?.phone) {
+        userData = state.user;
+        console.log('📦 PREFILL_DEBUG: Data loaded from state.user:', userData);
+      }
+
+      // If we have user data, enter edit mode and pre-fill form
+      if (userData && userData.phone) {
+        console.log('EDIT MODE DETECTED - Phone found:', userData.phone);
+        setIsEditingExisting(true);
+
+        // PRE-FILL EVERY SINGLE FIELD
+        const newForm = {
+          first: userData.first ? userData.first.trim() : "",
+          middle: userData.middle ? userData.middle.trim() : "",
+          last: userData.last ? userData.last.trim() : "",
+          nid: userData.nid ? userData.nid.trim() : "",
+          phone: userData.phone ? userData.phone.trim() : "",
+          email: userData.email ? userData.email.trim() : "", // Real email, not hardcoded!
+          password: "",
+          confirm: ""
+        };
+
+        console.log('Setting form with pre-filled data:');
+        console.log('  First:', newForm.first);
+        console.log('  Last:', newForm.last);
+        console.log('  Email:', newForm.email);
+        console.log('  NID:', newForm.nid);
+        console.log('  Phone:', newForm.phone);
+
+        setForm(newForm);
+        console.log('Form state has been updated with pre-filled data');
+      } else {
+        console.log('No user data found - starting fresh registration');
+        setIsEditingExisting(false);
+        setForm({
+          first: "",
+          middle: "",
+          last: "",
+          nid: "",
+          phone: "",
+          email: "",
+          password: "",
+          confirm: ""
+        });
+      }
+
+      setDataLoaded(true);
+      console.log('Data loading completed');
+    } catch (e) {
+      console.error('❌ Critical error in data loading:', e);
+      setDataLoaded(true);
+    }
+  }, [state.user, navigate]); // Only runs on mount
+
+  // DEBUG LOG: Whenever form changes, log the current state
+  useEffect(() => {
+    if (dataLoaded) {
+      console.log('🎯 Form state updated:', {
+        isEditingExisting,
+        phone: form.phone,
+        email: form.email,
+        firstName: form.first,
+        lastName: form.last,
+        nid: form.nid
+      });
+    }
+  }, [form, isEditingExisting, dataLoaded]);
+
+  // DUPLICATE PHONE CHECK - Only alert if phone belongs to DIFFERENT user
+  useEffect(() => {
+    if (!dataLoaded || !form.phone || !/^[0-9]{11}$/.test(form.phone)) {
+      setIsDuplicatePhone(false);
+      setShowDuplicateToast(false);
+      return;
+    }
+
+    console.log('Checking for duplicate phone:', form.phone, '| isEditingExisting:', isEditingExisting);
+
+    async function checkDuplicate() {
+      try {
+        const appUsers = await localforage.getItem('app_users') || [];
+
+        // If we're in edit mode, allow this phone (it's the current user's)
+        if (isEditingExisting) {
+          setIsDuplicatePhone(false);
+          setShowDuplicateToast(false);
+          return;
+        }
+
+        // Check if phone exists in global database
+        const userExists = appUsers.some(u => u.phone === form.phone);
+
+        if (userExists) {
+          setIsDuplicatePhone(true);
+          setShowDuplicateToast(true);
+
+          const timer = setTimeout(() => {
+            setRedirecting(true);
+            let existingUser = appUsers.find(u => u.phone === form.phone);
+            if (existingUser) {
+              const userWithFlag = { ...existingUser, isReturningPendingUser: true };
+              setState(s => ({ ...s, user: userWithFlag }));
+              navigate('statusDashboard');
+            }
+          }, 2000);
+          return () => clearTimeout(timer);
+        } else {
+          setIsDuplicatePhone(false);
+          setShowDuplicateToast(false);
+        }
+      } catch (e) {
+        console.error('Error checking duplicate phone:', e);
+      }
+    }
+    
+    checkDuplicate();
+  }, [form.phone, isEditingExisting, dataLoaded, navigate, setState]);
+
+  function update(k, v) {
+    console.log(`📝 User changing field [${k}] to:`, v);
+    setForm(p => ({ ...p, [k]: v }));
+    setErrors(e => ({ ...e, [k]: undefined }));
+  }
+
+  async function handleRegister() {
+    console.log('=== HANDLEREGISTER START ===');
+    console.log('Mode:', isEditingExisting ? 'EDIT' : 'CREATE');
+    console.log('Form data:', form);
+
+    // Don't proceed if duplicate phone detected
+    if (isDuplicatePhone) {
+      console.log('Blocking: Duplicate phone detected');
+      setErrors({ phone: "This phone number is already registered" });
+      return;
+    }
+
+    const newErrors = {};
+
+    // Validate fields
+    if (!form.first || form.first.trim().length < 2) newErrors.first = "First name must be at least 2 characters";
+    if (!form.last || form.last.trim().length < 2) newErrors.last = "Last name must be at least 2 characters";
+
+    // Email validation - REQUIRED for new registration, optional for editing
+    if (!isEditingExisting) {
+      if (!form.email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(form.email)) {
+        newErrors.email = "Enter a valid email";
+      }
+    } else {
+      // For edit mode: If they entered an email, validate it. Otherwise optional.
+      if (form.email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(form.email)) {
+        newErrors.email = "Enter a valid email";
+      }
+    }
+
+    if (!/^[0-9]{14}$/.test(form.nid)) newErrors.nid = "National ID must be 14 digits";
+    if (!/^[0-9]{11}$/.test(form.phone)) newErrors.phone = "Phone number must be 11 digits";
+
+    // PASSWORD VALIDATION
+    if (!isEditingExisting) {
+      // NEW REGISTRATION: Password required
+      if (!form.password || form.password.length < 8) {
+        newErrors.password = "Password must be at least 8 characters";
+      }
+      if (form.confirm !== form.password) {
+        newErrors.confirm = "Passwords do not match";
+      }
+    } else {
+      // EDITING: Password optional, but if entered, must match
+      if (form.password && form.password.length < 8) {
+        newErrors.password = "Password must be at least 8 characters";
+      }
+      if (form.password && form.confirm !== form.password) {
+        newErrors.confirm = "Passwords do not match";
+      }
+    }
+
+    if (Object.keys(newErrors).length > 0) {
+      console.log('Validation errors:', newErrors);
+      setErrors(newErrors);
+      return;
+    }
+
+    const name = `${form.first} ${form.last}`.trim();
+    const role = /admin/i.test(name) || /admin/i.test(form.email) ? 'admin' : 'user';
+
+    // ============ EDIT MODE: Update existing user ============
+    if (isEditingExisting) {
+      try {
+        const updatedUserData = {
+          first: form.first.trim(),
+          middle: form.middle.trim(),
+          last: form.last.trim(),
+          email: form.email.trim(),
+          nid: form.nid.trim(),
+          phone: form.phone.trim(),
+          name,
+          role
+        };
+
+        if (form.password) {
+          updatedUserData.password = bcrypt.hashSync(form.password, 10);
+        }
+
+        // UPDATE app_users array using phone as key
+        let appUsers = await localforage.getItem('app_users') || [];
+        const userIdx = appUsers.findIndex(u => u.phone === form.phone);
+        if (userIdx > -1) {
+          appUsers[userIdx] = { ...appUsers[userIdx], ...updatedUserData };
+        } else {
+          appUsers.push(updatedUserData);
+        }
+        await localforage.setItem('app_users', appUsers);
+
+        // Update session
+        const sessionUser = {
+          ...state.user,
+          ...updatedUserData,
+          isEditingProfile: false,
+        };
+        setState(s => ({ ...s, user: sessionUser }));
+        localStorage.setItem('bike_app_user', JSON.stringify(sessionUser));
+
+        navigate('statusDashboard');
+        return;
+      } catch (e) {
+        console.error('Error updating user:', e);
+        setErrors({ form: 'Error updating profile: ' + e.message });
+        return;
+      }
+    }
+
+    // ============ CREATE MODE: New registration ============
+    console.log('=== CREATE MODE: NEW USER REGISTRATION ===');
+    console.log('Creating new user with phone:', form.phone);
+
+    const newUser = {
+      first: form.first.trim(),
+      middle: form.middle.trim(),
+      last: form.last.trim(),
+      email: form.email.trim(),
+      nid: form.nid.trim(),
+      phone: form.phone.trim(),
+      password: bcrypt.hashSync(form.password, 10),
+      name,
+      role,
+      status: 'pending'
+    };
+
+    console.log('New user object created:', newUser);
+
+    setState(s => ({
+      ...s,
+      user: { ...s.user, ...newUser }
+    }));
+
+    console.log('User state updated - navigating to scanId');
+    navigate('scanId');
+  }
+
+  function handleSocial(provider) {
+    if (socialLoading) return;
+    setSocialLoading(true);
+    setTimeout(() => {
+      const mock = provider === 'google'
+        ? { name: 'Google User', email: 'google@bike.com' }
+        : { name: 'Apple User', email: 'apple@bike.com' };
+      const role = /admin/i.test(mock.name) || /admin/i.test(mock.email) ? 'admin' : 'user';
+      setState(s => ({
+        ...s,
+        user: {
+          ...s.user,
+          name: mock.name,
+          email: mock.email,
+          role,
+          status: 'pending'
+        }
+      }));
+      setSocialLoading(false);
+      navigate('scanId');
+    }, 1500);
+  }
+
+  return (
+    <div style={{ minHeight: "100%", background: "white" }}>
+      <StatusBar />
+      <div style={{ padding: "8px 24px 32px" }}>
+        <BackBtn onBack={() => navigate("welcome")} />
+        <div style={{ marginTop: 16, marginBottom: 24 }}>
+          <div className="page-title">{isEditingExisting ? "Edit Profile" : "Create Account"}</div>
+          <p className="page-subtitle">{isEditingExisting ? "Update your information" : "Enter your details to start renting bikes"}</p>
+        </div>
+        {[
+          ["first", "First Name", "first name"],
+          ["middle", "Middle Name", "middle name"],
+          ["last", "Last Name", "last name"],
+        ].map(([k, label, ph]) => (
+          <div key={k} style={{ marginBottom: 14 }}>
+            <label className="input-label">{label}</label>
+            <input
+              className={`input-field ${errors[k] ? "error" : ""}`}
+              placeholder={ph}
+              value={form[k]}
+              autoComplete="off"
+              onChange={e => update(k, e.target.value)}
+            />
+            {errors[k] && <span style={{ color: "#FF4D4D", fontSize: 12, marginTop: 4, display: 'block' }}>{errors[k]}</span>}
+          </div>
+        ))}
+        <div style={{ marginBottom: 14 }}>
+          <label className="input-label">Email</label>
+          <input
+            className={`input-field ${errors.email ? "error" : ""}`}
+            placeholder="you@example.com"
+            value={form.email}
+            onChange={e => update("email", e.target.value)}
+            type="email"
+            autoComplete="off"
+          />
+          {errors.email && <span style={{ color: "#FF4D4D", fontSize: 12, marginTop: 4, display: 'block' }}>{errors.email}</span>}
+        </div>
+        <div style={{ marginBottom: 14 }}>
+          <label className="input-label">National ID</label>
+          <input
+            className={`input-field ${errors.nid ? "error" : ""}`}
+            placeholder="Enter 14-digit National ID"
+            value={form.nid}
+            onChange={e => update("nid", e.target.value)}
+            maxLength={14}
+            type="tel"
+          />
+          {errors.nid && <span style={{ color: "#FF4D4D", fontSize: 12, marginTop: 4, display: 'block' }}>{errors.nid}</span>}
+        </div>
+        <div style={{ marginBottom: 14 }}>
+          <label className="input-label" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <Icons.PhoneIcon size={18} color="#111" /> Phone Number
+            {isEditingExisting && <span style={{ fontSize: 11, color: "#999", marginLeft: 8 }}>(Cannot be changed)</span>}
+          </label>
+          <input
+            className={`input-field ${errors.phone || isDuplicatePhone ? "error" : ""}`}
+            placeholder="01234567890"
+            value={form.phone}
+            onChange={e => update("phone", e.target.value.replace(/\D/g, ''))}
+            type="tel"
+            autoComplete="off"
+            maxLength={11}
+            disabled={isEditingExisting}
+            style={{ opacity: isEditingExisting ? 0.6 : 1, cursor: isEditingExisting ? 'not-allowed' : 'text' }}
+          />
+          {isEditingExisting && <span style={{ color: "#999", fontSize: 11, marginTop: 4, display: 'block', fontStyle: 'italic' }}>This is your unique account ID and cannot be changed</span>}
+          {isDuplicatePhone && <span style={{ color: "#FF4D4D", fontSize: 12, marginTop: 4, display: "flex", alignItems: "center", gap: 4 }}><Icons.AlertIcon size={14} /> This phone number is already registered</span>}
+          {errors.phone && <span style={{ color: "#FF4D4D", fontSize: 12, marginTop: 4, display: 'block' }}>{errors.phone}</span>}
+        </div>
+
+        {showDuplicateToast && (
+          <div style={{
+            background: "#fff3cd",
+            border: "1px solid #ffc107",
+            borderRadius: 8,
+            padding: 12,
+            marginBottom: 16,
+            display: "flex",
+            alignItems: "center",
+            gap: 10
+          }}>
+            <Icons.AlertIcon size={20} color="#ff9800" />
+            <div style={{ flex: 1, fontSize: 13 }}>
+              <strong>This number is already registered.</strong>
+              <div style={{ fontSize: 12, color: "#666", marginTop: 4 }}>Redirecting to your status page...</div>
+            </div>
+          </div>
+        )}
+        <div style={{ marginBottom: 14 }}>
+          <label className="input-label">
+            Password
+            {isEditingExisting && <span style={{ fontSize: 11, color: "#999", marginLeft: 8 }}>(Optional - leave blank to keep current)</span>}
+          </label>
+          <input
+            className={`input-field ${errors.password ? "error" : ""}`}
+            placeholder={isEditingExisting ? "Leave blank to keep current password" : "Enter password"}
+            value={form.password}
+            onChange={e => update("password", e.target.value)}
+            type="password"
+            autoComplete="new-password"
+          />
+          {errors.password && <span style={{ color: "#FF4D4D", fontSize: 12, marginTop: 4, display: 'block' }}>{errors.password}</span>}
+        </div>
+        <div style={{ marginBottom: 24 }}>
+          <label className="input-label">
+            Confirm Password
+            {isEditingExisting && <span style={{ fontSize: 11, color: "#999", marginLeft: 8 }}>(Optional)</span>}
+          </label>
+          <input
+            className={`input-field ${errors.confirm ? "error" : ""}`}
+            placeholder={isEditingExisting ? "Confirm new password if changing" : "Enter confirm password"}
+            value={form.confirm}
+            onChange={e => update("confirm", e.target.value)}
+            type="password"
+            autoComplete="new-password"
+          />
+          {errors.confirm && <span style={{ color: "#FF4D4D", fontSize: 12, marginTop: 4, display: 'block' }}>{errors.confirm}</span>}
+        </div>
+        {!isEditingExisting && (
+          <>
+            <div className="divider">Or</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 24 }}>
+              <button
+                className="social-btn"
+                onClick={() => handleSocial('google')}
+                disabled={socialLoading}
+                style={{ position: 'relative' }}
+              >
+                {socialLoading ? (
+                  <div className="spinner" style={{ width: 20, height: 20, borderTopColor: DARK, margin: '0 auto' }} />
+                ) : (
+                  <><span>G</span> Continue with Google</>
+                )}
+              </button>
+              <button
+                className="social-btn"
+                onClick={() => handleSocial('apple')}
+                disabled={socialLoading}
+                style={{ position: 'relative' }}
+              >
+                {socialLoading ? (
+                  <div className="spinner" style={{ width: 20, height: 20, borderTopColor: DARK, margin: '0 auto' }} />
+                ) : (
+                  <><span>A</span> Continue with Apple</>
+                )}
+              </button>
+            </div>
+          </>
+        )}
+        <button
+          className="btn-primary"
+          onClick={handleRegister}
+          disabled={isDuplicatePhone || redirecting}
+          style={{ opacity: (isDuplicatePhone || redirecting) ? 0.5 : 1, cursor: (isDuplicatePhone || redirecting) ? 'not-allowed' : 'pointer' }}
+        >
+          {redirecting ? "Redirecting..." : (isEditingExisting ? "Update Profile" : "Create Account")}
+        </button>
+      </div>
+    </div>
+  );
+}

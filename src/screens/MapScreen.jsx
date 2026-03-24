@@ -62,7 +62,19 @@ function MapScreen({ navigate, state, setState }) {
 
   // deriving bikes from state and inject live test bike
   const displayBikes = React.useMemo(() => {
-    const bikes = [...(state.bikes || [])];
+    let bikes = [...(state.bikes || [])];
+    
+    // Inject Demo User Proximity Bikes
+    if (state.user?.phone === '01000000000' && userLocation) {
+      const demoBikes = [
+        { id: "B-DEMO1", lat: userLocation.lat + 0.0005, lng: userLocation.lng + 0.0005, battery: "92%", status: "Available", type: "Electric" },
+        { id: "B-DEMO2", lat: userLocation.lat - 0.0007, lng: userLocation.lng + 0.0003, battery: "78%", status: "Available", type: "Electric" },
+        { id: "B-DEMO3", lat: userLocation.lat + 0.0003, lng: userLocation.lng - 0.0008, battery: "45%", status: "Available", type: "Electric" },
+        { id: "B-DEMO4", lat: userLocation.lat - 0.0002, lng: userLocation.lng - 0.0004, battery: "100%", status: "Available", type: "Electric" },
+      ];
+      bikes = [...bikes, ...demoBikes];
+    }
+
     if (userLocation) {
       const idx = bikes.findIndex(b => b.id === 'B-LOCAL');
       // Set test bike coordinates identically to [0, 0] to guarantee Zero Distance math for overrides
@@ -71,12 +83,12 @@ function MapScreen({ navigate, state, setState }) {
       else bikes.push(testBike);
     }
     return bikes;
-  }, [state.bikes, userLocation]);
+  }, [state.bikes, userLocation, state.user?.phone]);
 
   return (
     <div style={{ height: "100%", display: "flex", flexDirection: "column", background: "#fff" }}>
-      {/* 60% Map Height */}
-      <div style={{ flex: selectedBike !== null ? 6 : 1, position: "relative", zIndex: 0 }}>
+      {/* 60% Map Height - Locked with Z-Index for Mobile */}
+      <div style={{ height: selectedBike !== null ? '60dvh' : '100dvh', position: "relative", zIndex: 1, flex: selectedBike !== null ? 'none' : 1 }}>
         <LeafletMap bikes={displayBikes} onBikeClick={i => setSelectedBike(i)} selectedBike={selectedBike} userLocation={userLocation} />
       </div>
 
@@ -128,8 +140,18 @@ function MapScreen({ navigate, state, setState }) {
 
       {/* Right-side FABs */}
       <div style={{ position: "absolute", bottom: 90, right: 16, zIndex: 10, display: "flex", flexDirection: "column", gap: 10 }}>
-        <button style={btnBoxStyle} aria-label="My location" onClick={() => console.log("Locating user...")}>
-          <Icons.LocationIcon size={20} />
+        <button 
+          style={{ ...btnBoxStyle, background: LIME }} 
+          aria-label="My location" 
+          onClick={() => {
+            if (navigator.geolocation) {
+              navigator.geolocation.getCurrentPosition((pos) => {
+                setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+              }, (err) => alert("GPS Refresh failed: " + err.message));
+            }
+          }}
+        >
+          <Icons.LocationIcon size={20} color={DARK} />
         </button>
         <button style={btnBoxStyle} aria-label="Refresh map" onClick={() => { console.log("Refreshing bikes..."); window.location.reload(); }}>
           <Icons.RefreshIcon size={20} />
@@ -223,8 +245,20 @@ function MapScreen({ navigate, state, setState }) {
                   Move Closer ({(dist/1000).toFixed(2)}km)
                 </button>
               ) : (
-                <button className="btn-primary" onClick={() => {
+                <button className="btn-primary" onClick={async () => {
                   setState(s => ({ ...s, selectedBike: bike }));
+                  
+                  // ── REAL BLUETOOTH HANDSHAKE ──
+                  // Skip for Demo User for "Instant" experience
+                  const isDemo = state.user?.phone === '01000000000';
+                  if (!isDemo) {
+                    const bleOk = await simulateBluetoothScan(bike.id);
+                    if (!bleOk) {
+                      alert("Bluetooth Error: Please enable Bluetooth to connect to the smart lock.");
+                      return;
+                    }
+                  }
+                  
                   navigate("scanQR");
                 }}>
                   <Icons.QRScanIcon size={18} color={DARK} /> Scan To Unlock

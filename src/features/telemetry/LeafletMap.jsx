@@ -62,6 +62,13 @@ export default
         }).addTo(map);
 
         mapInstanceRef.current = map;
+        
+        // Force a size invalidation after a small delay to fix the "gray tiles" bug on mobile
+        setTimeout(() => {
+          if (mapInstanceRef.current) {
+            mapInstanceRef.current.invalidateSize();
+          }
+        }, 300);
       }
 
       const map = mapInstanceRef.current;

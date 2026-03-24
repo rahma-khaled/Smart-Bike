@@ -28,9 +28,10 @@ export default
 
       // Initialize map instance if not present
       if (!mapInstanceRef.current) {
+        const initialCenter = userLocation ? [userLocation.lat, userLocation.lng] : [DAMIETTA_CENTER.lat, DAMIETTA_CENTER.lng];
         const map = L.map(mapRef.current, {
-          center: [31.4175, 31.8144],
-          zoom: 14,
+          center: initialCenter,
+          zoom: 15,
           zoomControl: true,
           attributionControl: false,
         });
@@ -172,35 +173,9 @@ export default
   }, []);
 
   return (
-    <>
-      {/* Non-intrusive Outside Zone Banner */}
-      {isOutside && (
-        <div style={{
-          position: "absolute",
-          top: 12,
-          left: "50%",
-          transform: "translateX(-50%)",
-          zIndex: 1000,
-          background: "rgba(255, 59, 48, 0.95)",
-          color: "white",
-          padding: "8px 16px",
-          borderRadius: 20,
-          fontSize: 11,
-          fontWeight: 700,
-          whiteSpace: "nowrap",
-          boxShadow: "0 4px 12px rgba(0,0,0,0.2)",
-          display: "flex",
-          alignItems: "center",
-          gap: 6
-        }}>
-          <Icons.AlertIcon size={14} color="white" />
-          You are outside the primary zone, extra fees may apply
-        </div>
-      )}
-      <div
-        ref={mapRef}
-        style={{ width: '100%', height: '100%', background: '#e8eaf0' }}
-      />
-    </>
+    <div
+      ref={mapRef}
+      style={{ width: '100%', height: '100%', background: '#e8eaf0' }}
+    />
   );
 }

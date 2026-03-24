@@ -8,8 +8,9 @@ export default
   const mapRef = useRef(null);
   const mapInstanceRef = useRef(null);
   const markersRef = useRef([]);
-  const [isOutside, setIsOutside] = useState(false);
-  const geofenceAlertedRef = useRef(false);
+  // Geofence logic disabled for demo overdrive
+  // const [isOutside, setIsOutside] = useState(false);
+  // const geofenceAlertedRef = useRef(false);
 
   useEffect(() => {
     // Inject Leaflet CSS if not present
@@ -28,9 +29,12 @@ export default
 
       // Initialize map instance if not present
       if (!mapInstanceRef.current) {
-        const initialCenter = userLocation ? [userLocation.lat, userLocation.lng] : [DAMIETTA_CENTER.lat, DAMIETTA_CENTER.lng];
+        // Hard fallback to Damietta center if GPS not ready
+        const startLat = userLocation?.lat || 31.4165;
+        const startLng = userLocation?.lng || 31.8133;
+        
         const map = L.map(mapRef.current, {
-          center: initialCenter,
+          center: [startLat, startLng],
           zoom: 15,
           zoomControl: true,
           attributionControl: false,
@@ -66,12 +70,14 @@ export default
 
         mapInstanceRef.current = map;
         
-        // Force a size invalidation after a small delay to fix the "gray tiles" bug on mobile
+        // ── CRITICAL FIX: RE-INVALIDATE SIZE ──
+        // This ensures the tiles fill the container on mobile/Vercel
         setTimeout(() => {
           if (mapInstanceRef.current) {
+            console.log("[Map] Forcing size invalidation...");
             mapInstanceRef.current.invalidateSize();
           }
-        }, 300);
+        }, 1000);
       }
 
       const map = mapInstanceRef.current;
@@ -111,23 +117,12 @@ export default
       const bikesToShow = bikes.length > 0 ? bikes : DAMIETTA_BIKES;
 
       bikesToShow.forEach((b, i) => {
-        const lat = b.lat || 31.4175;
-        const lng = b.lng || 31.8144;
+        const lat = b.lat || 31.4165;
+        const lng = b.lng || 31.8133;
         const marker = L.marker([lat, lng], { icon: bikeIcon(selectedBike === i, b.status), draggable: false })
           .addTo(map)
           .on('click', () => onBikeClick && onBikeClick(i));
 
-        // Check if user is outside geofence (Non-intrusive)
-        if (userLocation && !isWithinServiceZone(userLocation.lat, userLocation.lng)) {
-          if (!isOutside) setIsOutside(true);
-          if (!geofenceAlertedRef.current) {
-            console.warn("[Admin Log] User outside zone:", userLocation);
-            geofenceAlertedRef.current = true;
-          }
-        } else if (isOutside) {
-          setIsOutside(false);
-          geofenceAlertedRef.current = false;
-        }
         markersRef.current.push(marker);
       });
 
@@ -175,7 +170,7 @@ export default
   return (
     <div
       ref={mapRef}
-      style={{ width: '100%', height: '100%', background: '#e8eaf0' }}
+      style={{ width: '100%', height: '100dvh', minHeight: '100dvh', background: '#e8eaf0', zIndex: 1 }}
     />
   );
 }

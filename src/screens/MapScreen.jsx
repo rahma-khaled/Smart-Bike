@@ -64,18 +64,17 @@ function MapScreen({ navigate, state, setState }) {
   const displayBikes = React.useMemo(() => {
     let bikes = [...(state.bikes || [])];
     
-    // Inject Demo User Proximity Bikes
-    if (state.user?.phone === '01000000000' && userLocation) {
-      const demoBikes = [
-        { id: "B-DEMO1", lat: userLocation.lat + 0.0005, lng: userLocation.lng + 0.0005, battery: "92%", status: "Available", type: "Electric" },
-        { id: "B-DEMO2", lat: userLocation.lat - 0.0007, lng: userLocation.lng + 0.0003, battery: "78%", status: "Available", type: "Electric" },
-        { id: "B-DEMO3", lat: userLocation.lat + 0.0003, lng: userLocation.lng - 0.0008, battery: "45%", status: "Available", type: "Electric" },
-        { id: "B-DEMO4", lat: userLocation.lat - 0.0002, lng: userLocation.lng - 0.0004, battery: "100%", status: "Available", type: "Electric" },
-      ];
-      bikes = [...bikes, ...demoBikes];
-    }
-
+    // ── UNIVERSAL PHANTOM BIKES (Follow user anywhere) ──
     if (userLocation) {
+      const phantomBikes = [
+        { id: "B-PHNTM1", lat: userLocation.lat + 0.0008, lng: userLocation.lng + 0.0012, battery: "95%", status: "Available", type: "Electric" },
+        { id: "B-PHNTM2", lat: userLocation.lat - 0.0006, lng: userLocation.lng + 0.0007, battery: "84%", status: "Available", type: "Electric" },
+        { id: "B-PHNTM3", lat: userLocation.lat + 0.0011, lng: userLocation.lng - 0.0009, battery: "42%", status: "Available", type: "Electric" },
+        { id: "B-PHNTM4", lat: userLocation.lat - 0.0004, lng: userLocation.lng - 0.0005, battery: "100%", status: "Available", type: "Electric" },
+        { id: "B-PHNTM5", lat: userLocation.lat - 0.0012, lng: userLocation.lng + 0.0015, battery: "68%", status: "Available", type: "Electric" },
+      ];
+      bikes = [...bikes, ...phantomBikes];
+
       const idx = bikes.findIndex(b => b.id === 'B-LOCAL');
       // Set test bike coordinates identically to [0, 0] to guarantee Zero Distance math for overrides
       const testBike = { lat: 0, lng: 0, id: "B-LOCAL", name: "My Test Bike", battery: "85 M", status: "Locked", rate: "5 EGP / Hr" };
@@ -83,7 +82,7 @@ function MapScreen({ navigate, state, setState }) {
       else bikes.push(testBike);
     }
     return bikes;
-  }, [state.bikes, userLocation, state.user?.phone]);
+  }, [state.bikes, userLocation]);
 
   return (
     <div style={{ height: "100%", display: "flex", flexDirection: "column", background: "#fff" }}>

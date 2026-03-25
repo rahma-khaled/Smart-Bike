@@ -2,12 +2,19 @@ import React from 'react';
 import { LIME, DARK } from '../constants/theme.js';
 
 // ===== ORIGINAL SVG ICON COMPONENTS =====
-export const BikeLogo = ({ size = 48, color = LIME }) => (
-  <svg width={size} height={size} viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <circle cx="15" cy="32" r="8" stroke={color} strokeWidth="2.5" />
-    <circle cx="33" cy="32" r="8" stroke={color} strokeWidth="2.5" />
-    <path d="M15 24L24 12L33 24" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-    <circle cx="24" cy="18" r="2" fill={color} />
+export const BikeLogo = ({ size = 48, color = "#000" }) => (
+  <svg width={size} height={size} viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+    {/* Wheels - Thick Rings as in image_8.png */}
+    <circle cx="28" cy="68" r="18" stroke={color} strokeWidth="10" />
+    <circle cx="72" cy="68" r="18" stroke={color} strokeWidth="10" />
+    {/* Stylized Frame Path */}
+    <path 
+      d="M28 68L45 35H68L72 68M45 35L42 22H30M68 35L72 20H82" 
+      stroke={color} 
+      strokeWidth="10" 
+      strokeLinecap="round" 
+      strokeLinejoin="round" 
+    />
   </svg>
 );
 
@@ -127,11 +134,16 @@ export const HeadsetIcon = ({ size = 20, color = "#111" }) => (
 );
 
 export const BikeIconSVG = ({ size = 24, color = "#111" }) => (
-  <svg width={size} height={size} viewBox="0 0 48 48" fill="none">
-    <circle cx="13" cy="32" r="8" stroke={color} strokeWidth="2.5" />
-    <circle cx="35" cy="32" r="8" stroke={color} strokeWidth="2.5" />
-    <path d="M13 24L22 12L35 24" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-    <circle cx="22" cy="17" r="2" fill={color} />
+  <svg width={size} height={size} viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="28" cy="68" r="18" stroke={color} strokeWidth="10" />
+    <circle cx="72" cy="68" r="18" stroke={color} strokeWidth="10" />
+    <path 
+      d="M28 68L45 35H68L72 68M45 35L42 22H30M68 35L72 20H82" 
+      stroke={color} 
+      strokeWidth="10" 
+      strokeLinecap="round" 
+      strokeLinejoin="round" 
+    />
   </svg>
 );
 

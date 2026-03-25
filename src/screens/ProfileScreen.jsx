@@ -143,7 +143,7 @@ function ProfileScreen({ navigate, state, setState }) {
           style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, width: '100%' }}
           onClick={handleLogout}
         >
-          <Icons.PhoneIcon size={18} color="white" style={{ transform: 'rotate(135deg)' }} />
+          <Icons.LogOutIcon size={20} color="white" />
           Log Out
         </button>
       </div>

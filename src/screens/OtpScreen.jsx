@@ -65,7 +65,7 @@ function OtpScreen({ navigate, state, setState }) {
         <BackBtn onBack={() => navigate("otpMethod")} />
         <div style={{ marginTop: 20, marginBottom: 20 }}>
           <div className="page-title">Verification code</div>
-          <p className="page-subtitle" style={{ marginTop: 8 }}>We have sent the verification code to your {otpMethod === "whatsapp" ? "WhatsApp" : "phone"}</p>
+          <p className="page-subtitle" style={{ marginTop: 8 }}>A verification code has been sent to <span style={{ fontWeight: 700, color: DARK }}>{state.user?.phone || "[Phone Number]"}</span></p>
         </div>
 
         {/* Notification sent indicator */}

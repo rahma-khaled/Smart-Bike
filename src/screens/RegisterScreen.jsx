@@ -21,7 +21,6 @@ function RegisterScreen({ navigate, state, setState }) {
     confirm: ""
   });
   const [errors, setErrors] = useState({});
-  const [socialLoading, setSocialLoading] = useState(false);
   const [isDuplicatePhone, setIsDuplicatePhone] = useState(false);
   const [showDuplicateToast, setShowDuplicateToast] = useState(false);
   const [redirecting, setRedirecting] = useState(false);
@@ -62,9 +61,9 @@ function RegisterScreen({ navigate, state, setState }) {
         console.log('📦 PREFILL_DEBUG: Data loaded from state.user:', userData);
       }
 
-      // If we have user data, enter edit mode and pre-fill form
-      if (userData && userData.phone) {
-        console.log('EDIT MODE DETECTED - Phone found:', userData.phone);
+      // If we have user data, enter edit mode ONLY IF they have a status (not a fresh redirect)
+      if (userData && userData.phone && userData.status && userData.status !== 'null') {
+        console.log('EDIT MODE DETECTED - Status found:', userData.status);
         setIsEditingExisting(true);
 
         // PRE-FILL EVERY SINGLE FIELD
@@ -74,29 +73,21 @@ function RegisterScreen({ navigate, state, setState }) {
           last: userData.last ? userData.last.trim() : "",
           nid: userData.nid ? userData.nid.trim() : "",
           phone: userData.phone ? userData.phone.trim() : "",
-          email: userData.email ? userData.email.trim() : "", // Real email, not hardcoded!
+          email: userData.email ? userData.email.trim() : "",
           password: "",
           confirm: ""
         };
 
-        console.log('Setting form with pre-filled data:');
-        console.log('  First:', newForm.first);
-        console.log('  Last:', newForm.last);
-        console.log('  Email:', newForm.email);
-        console.log('  NID:', newForm.nid);
-        console.log('  Phone:', newForm.phone);
-
         setForm(newForm);
-        console.log('Form state has been updated with pre-filled data');
       } else {
-        console.log('No user data found - starting fresh registration');
+        console.log('STARTING FRESH REGISTRATION - Pre-filling phone if available');
         setIsEditingExisting(false);
         setForm({
           first: "",
           middle: "",
           last: "",
           nid: "",
-          phone: "",
+          phone: userData?.phone || "",
           email: "",
           password: "",
           confirm: ""
@@ -316,28 +307,6 @@ function RegisterScreen({ navigate, state, setState }) {
     navigate('scanId');
   }
 
-  function handleSocial(provider) {
-    if (socialLoading) return;
-    setSocialLoading(true);
-    setTimeout(() => {
-      const mock = provider === 'google'
-        ? { name: 'Google User', email: 'google@bike.com' }
-        : { name: 'Apple User', email: 'apple@bike.com' };
-      const role = /admin/i.test(mock.name) || /admin/i.test(mock.email) ? 'admin' : 'user';
-      setState(s => ({
-        ...s,
-        user: {
-          ...s.user,
-          name: mock.name,
-          email: mock.email,
-          role,
-          status: 'pending'
-        }
-      }));
-      setSocialLoading(false);
-      navigate('scanId');
-    }, 1500);
-  }
 
   return (
     <div style={{ minHeight: "100%", background: "white" }}>
@@ -345,8 +314,8 @@ function RegisterScreen({ navigate, state, setState }) {
       <div style={{ padding: "8px 24px 32px" }}>
         <BackBtn onBack={() => navigate("welcome")} />
         <div style={{ marginTop: 16, marginBottom: 24 }}>
-          <div className="page-title">{isEditingExisting ? "Edit Profile" : "Create Account"}</div>
-          <p className="page-subtitle">{isEditingExisting ? "Update your information" : "Enter your details to start renting bikes"}</p>
+          <div className="page-title">Create Account</div>
+          <p className="page-subtitle">{isEditingExisting ? "Update your information" : "Join Smart Bike today"}</p>
         </div>
         {[
           ["first", "First Name", "first name"],
@@ -392,7 +361,6 @@ function RegisterScreen({ navigate, state, setState }) {
         <div style={{ marginBottom: 14 }}>
           <label className="input-label" style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <Icons.PhoneIcon size={18} color="#111" /> Phone Number
-            {isEditingExisting && <span style={{ fontSize: 11, color: "#999", marginLeft: 8 }}>(Cannot be changed)</span>}
           </label>
           <input
             className={`input-field ${errors.phone || isDuplicatePhone ? "error" : ""}`}
@@ -402,10 +370,7 @@ function RegisterScreen({ navigate, state, setState }) {
             type="tel"
             autoComplete="off"
             maxLength={11}
-            disabled={isEditingExisting}
-            style={{ opacity: isEditingExisting ? 0.6 : 1, cursor: isEditingExisting ? 'not-allowed' : 'text' }}
           />
-          {isEditingExisting && <span style={{ color: "#999", fontSize: 11, marginTop: 4, display: 'block', fontStyle: 'italic' }}>This is your unique account ID and cannot be changed</span>}
           {isDuplicatePhone && <span style={{ color: "#FF4D4D", fontSize: 12, marginTop: 4, display: "flex", alignItems: "center", gap: 4 }}><Icons.AlertIcon size={14} /> This phone number is already registered</span>}
           {errors.phone && <span style={{ color: "#FF4D4D", fontSize: 12, marginTop: 4, display: 'block' }}>{errors.phone}</span>}
         </div>
@@ -430,8 +395,7 @@ function RegisterScreen({ navigate, state, setState }) {
         )}
         <div style={{ marginBottom: 14 }}>
           <label className="input-label">
-            Password
-            {isEditingExisting && <span style={{ fontSize: 11, color: "#999", marginLeft: 8 }}>(Optional - leave blank to keep current)</span>}
+            Password {isEditingExisting && <span style={{ fontSize: 11, color: "#999", marginLeft: 8 }}>(Optional - leave blank to keep current)</span>}
           </label>
           <input
             className={`input-field ${errors.password ? "error" : ""}`}
@@ -445,8 +409,7 @@ function RegisterScreen({ navigate, state, setState }) {
         </div>
         <div style={{ marginBottom: 24 }}>
           <label className="input-label">
-            Confirm Password
-            {isEditingExisting && <span style={{ fontSize: 11, color: "#999", marginLeft: 8 }}>(Optional)</span>}
+            Confirm Password {isEditingExisting && <span style={{ fontSize: 11, color: "#999", marginLeft: 8 }}>(Optional)</span>}
           </label>
           <input
             className={`input-field ${errors.confirm ? "error" : ""}`}
@@ -458,37 +421,7 @@ function RegisterScreen({ navigate, state, setState }) {
           />
           {errors.confirm && <span style={{ color: "#FF4D4D", fontSize: 12, marginTop: 4, display: 'block' }}>{errors.confirm}</span>}
         </div>
-        {!isEditingExisting && (
-          <>
-            <div className="divider">Or</div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 24 }}>
-              <button
-                className="social-btn"
-                onClick={() => handleSocial('google')}
-                disabled={socialLoading}
-                style={{ position: 'relative' }}
-              >
-                {socialLoading ? (
-                  <div className="spinner" style={{ width: 20, height: 20, borderTopColor: DARK, margin: '0 auto' }} />
-                ) : (
-                  <><span>G</span> Continue with Google</>
-                )}
-              </button>
-              <button
-                className="social-btn"
-                onClick={() => handleSocial('apple')}
-                disabled={socialLoading}
-                style={{ position: 'relative' }}
-              >
-                {socialLoading ? (
-                  <div className="spinner" style={{ width: 20, height: 20, borderTopColor: DARK, margin: '0 auto' }} />
-                ) : (
-                  <><span>A</span> Continue with Apple</>
-                )}
-              </button>
-            </div>
-          </>
-        )}
+        {!isEditingExisting && <div style={{ marginBottom: 24 }} />}
         <button
           className="btn-primary"
           onClick={handleRegister}

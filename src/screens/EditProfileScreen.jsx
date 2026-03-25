@@ -36,7 +36,7 @@ function EditProfileScreen({ navigate, state, setState }) {
           </div>
         </div>
         {[
-          ["profilePic", "Profile Picture URL"], ["email", "Email Address"], ["phone", "Mobile Number"], ["password", "Password"]
+          ["profilePic", "Profile Picture URL"], ["email", "Email Address"], ["phone", "Mobile Number"]
         ].map(([key, label]) => (
           <div key={key} style={{ marginBottom: 4 }}>
             <div style={{ fontSize: 12, color: "#888", fontWeight: 600, marginBottom: 4 }}>{label}</div>
@@ -60,7 +60,7 @@ function EditProfileScreen({ navigate, state, setState }) {
             <input
               type="text"
               style={{ flex: 1, background: "none", border: "none", outline: "none", fontSize: 15, fontWeight: 600, fontFamily: "'DM Sans',sans-serif" }}
-              value={form.paymentMethod?.type === 'Vodafone Cash' ? form.paymentMethod.number : ""}
+              value={form.paymentMethod?.number || ""}
               onChange={e => setForm(p => ({ ...p, paymentMethod: { type: 'Vodafone Cash', number: e.target.value } }))}
               placeholder="Enter Vodafone Cash Number"
             />

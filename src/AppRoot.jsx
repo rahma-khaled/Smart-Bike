@@ -43,11 +43,15 @@ export default function AppRoot() {
       let initialScreen = 'login';
 
       if (user && user.phone) {
-        const status = (user.status || "").toLowerCase();
+        const status = (user.status || "").toUpperCase();
         if (isAdminMode || isAdminPath) initialScreen = 'adminDashboard';
-        else if (status === 'verified' || status === 'approved') initialScreen = 'map';
-        else if (status === 'pending' || status === 'needs_correction') initialScreen = 'statusDashboard';
-        else initialScreen = 'map'; // Safe fallback for weird states
+        else if (status === 'APPROVED' || status === 'VERIFIED') {
+           initialScreen = user.phoneVerified ? 'map' : 'otp';
+        }
+        else if (status === 'PENDING') initialScreen = 'pendingApproval';
+        else if (status === 'NEED_CORRECTION' || status === 'NEEDS_CORRECTION') initialScreen = 'needCorrection';
+        else if (status === 'REJECTED') initialScreen = 'login';
+        else initialScreen = 'scanId'; // Force ID upload for new/unverified users
       } else {
         if (path === '/') initialScreen = 'splash';
         else initialScreen = 'login';

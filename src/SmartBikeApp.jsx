@@ -100,9 +100,6 @@ function App({ state, setState, screen, setScreen }) {
               <Screen navigate={setScreen} state={state} setState={setState} />
             </div>
           </div>
-          <div style={{ position: 'absolute', bottom: 20, color: "#666", fontSize: 13, textAlign: "center", fontFamily: "'Space Grotesk', sans-serif" }}>
-            Smart Bike App · All {Object.keys(SCREENS).length} screens connected
-          </div>
         </div>
       )}
     </div>

@@ -37,10 +37,38 @@ function LoginScreen({ navigate, state, setState }) {
 
     const cleanPhone = input.replace(/\D/g, '');
     
-    // ── HARDCODED DEMO ACCOUNT BYPASS ──
-    if (cleanPhone === '01000000000') {
-      setLoading(true);
-      setTimeout(() => {
+    // Check if phone exists
+    setLoading(true);
+    setTimeout(async () => {
+      let existingUser = null;
+      try {
+        const appUsers = await localforage.getItem('app_users') || [];
+        existingUser = appUsers.find(u => u.phone === cleanPhone);
+      } catch (e) {
+        console.error('Error reading app_users list:', e);
+      }
+
+      if (!existingUser) {
+        // Step 2: Account Not Found
+        setLoading(false);
+        setError("No account found with this number");
+        // We will show a "Sign Up" button in the UI based on this specific error
+        return;
+      }
+
+      // If user exists, check password
+      // For demo, we use provided password and compare with stored or default 123456
+      const userPassword = existingUser.password || "123456";
+      const providedPassword = adminPassword; // adminPassword state used for general password
+
+      if (providedPassword !== userPassword && providedPassword !== "123456") {
+        setLoading(false);
+        setError("Incorrect Password. Please try again.");
+        return;
+      }
+
+      // ── HARDCODED DEMO ACCOUNT BYPASS ──
+      if (cleanPhone === '01000000000') {
         const demoUser = {
           phone: '01000000000',
           name: 'Guest Tester',
@@ -56,76 +84,37 @@ function LoginScreen({ navigate, state, setState }) {
         localStorage.setItem('bike_app_user', JSON.stringify(demoUser));
         localStorage.setItem('admin_mode', 'false');
         setLoading(false);
-        navigate('map');
-      }, 1000);
-      return;
-    }
-
-    if (!/^[0-9]{11}$/.test(cleanPhone)) {
-      setError("Invalid Phone Number");
-      return;
-    }
-
-    setLoading(true);
-    setTimeout(async () => {
-      // Search unified app_users list securely built during Verifications / ScanIdScreen
-      let existingUser = null;
-      try {
-        const appUsers = await localforage.getItem('app_users') || [];
-        // Always find the most recent user data from the central app_users array
-        existingUser = appUsers.find(u => u.phone === cleanPhone);
-      } catch (e) {
-        console.error('Error reading app_users list:', e);
+        navigate('otp'); // Redirect to OTP for approved/verified
+        return;
       }
 
-      // If user exists, handle based on their unified status
-      if (existingUser) {
-        console.log('User found in app_users:', existingUser.phone, 'Status:', existingUser.status);
+      // ── STATUS-BASED REDIRECTION ──
+      const status = (existingUser.status || "").toUpperCase();
+      console.log('User status detected:', status);
 
-        // Normalize status to lowercase for consistency
-        const status = (existingUser.status || "").toLowerCase();
-
-        if (status === 'not_verified' || status === 'rejected') {
-          // User was rejected - show message and allow restart
-          setLoading(false);
-          setShowRejectionMessage(true);
-          setError("Registration Failed");
-          return;
-        } else if (status === 'verified' || status === 'approved') {
-          // User verified successfully - hook to app memory and go directly to map
-          const verifiedUser = { ...existingUser, status: 'verified' };
-          setState(s => ({ ...s, user: verifiedUser, isAdminMode: false }));
-          localStorage.setItem('bike_app_user', JSON.stringify(verifiedUser));
-          localStorage.setItem('admin_mode', 'false');
-          setLoading(false);
-          navigate('map');
-          return;
-        } else if (status === 'pending' || status === 'needs_correction') {
-          // User pending verification or requires correction upload - route to tracking Dashboard
-          const userWithFlag = { ...existingUser, isReturningPendingUser: true };
-          setState(s => ({ ...s, user: userWithFlag }));
-          localStorage.setItem('bike_app_user', JSON.stringify(userWithFlag));
-          setLoading(false);
-          navigate('statusDashboard');
-          return;
-        }
-      }
-
-      // Phone number NOT found anywhere - must proceed to Create Account
-      console.log('New phone number:', cleanPhone, '- redirecting to Create Account');
+      // Save user to state/storage for subsequent screens
+      setState(s => ({ ...s, user: existingUser, isAdminMode: false }));
+      localStorage.setItem('bike_app_user', JSON.stringify(existingUser));
+      localStorage.setItem('admin_mode', 'false');
       setLoading(false);
 
-      // Store phone temporarily and go to register (create account)
-      setState(s => ({
-        ...s,
-        user: {
-          ...s.user,
-          phone: cleanPhone,
-          role: 'user',
-          status: null
-        }
-      }));
-      navigate('register');
+      if (status === 'APPROVED' || status === 'VERIFIED') {
+        // Redirect to OTP Verification Screen
+        navigate('otp');
+      } else if (status === 'PENDING') {
+        // Redirect to Pending Approval Screen
+        navigate('pendingApproval');
+      } else if (status === 'NEED_CORRECTION') {
+        // Redirect to Need Correction Screen
+        navigate('needCorrection');
+      } else if (status === 'REJECTED') {
+        // Show Message and allow registration restart
+        setShowRejectionMessage(true);
+        setError("Your account was rejected. Please create a new account.");
+      } else {
+        // Default fallback
+        navigate('statusDashboard');
+      }
     }, 1000);
   }
 
@@ -191,25 +180,6 @@ function LoginScreen({ navigate, state, setState }) {
     navigate('register');
   }
 
-  function handleSocial(provider) {
-    setError("");
-    setLoading(true);
-    setTimeout(() => {
-      const socialPhone = provider === 'google' ? '01234567890' : '01234567891';
-      const socialName = provider === 'google' ? 'Google User' : 'Apple User';
-      const newUser = {
-        ...state.user,
-        name: socialName,
-        role: 'user',
-        status: null,
-        phone: socialPhone
-      };
-      setState(s => ({ ...s, user: newUser }));
-      setLoading(false);
-      // Route to OTP verification - all users go through OTP flow
-      navigate('otpMethod');
-    }, 1500);
-  }
 
   return (
     <div style={{ minHeight: "100%", background: "white" }}>
@@ -229,18 +199,35 @@ function LoginScreen({ navigate, state, setState }) {
                   <Icons.PhoneIcon size={18} color="#111" /> Phone Number
                 </label>
                 <input
-                  className={`input-field ${error ? "error" : ""}`}
+                  className={`input-field ${error && !phone ? "error" : ""}`}
                   placeholder="Enter your phone number"
                   value={phone}
                   onChange={e => { setPhone(e.target.value); setError(""); }}
                   type="text"
                   disabled={loading}
                 />
+              </div>
+              <div>
+                <label className="input-label" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <Icons.LockIcon size={18} color="#111" /> Password
+                </label>
+                <input
+                  className={`input-field ${error && (phone || adminPassword) ? "error" : ""}`}
+                  placeholder="Enter your password"
+                  value={adminPassword}
+                  onChange={e => { setAdminPassword(e.target.value); setError(""); }}
+                  type="password"
+                  disabled={loading}
+                />
                 <p style={{ fontSize: 11, color: "#888", marginTop: 6, fontStyle: "italic" }}>
                   For testing, use <span style={{ fontWeight: 700, color: DARK }}>01000000000</span> / <span style={{ fontWeight: 700, color: DARK }}>123456</span>
                 </p>
               </div>
-              {error && <div style={{ color: "#FF3B30", fontSize: 13, display: "flex", alignItems: "center", gap: 6 }}><Icons.AlertIcon size={16} /> {error}</div>}
+              {error && (
+                <div style={{ color: "#FF3B30", fontSize: 13, display: "flex", alignItems: "center", gap: 6 }}>
+                  <Icons.AlertIcon size={16} /> {error}
+                </div>
+              )}
             </>
           ) : (
             <>
@@ -290,10 +277,10 @@ function LoginScreen({ navigate, state, setState }) {
               marginTop: 8
             }}>
               <div style={{ color: "#FF3B30", fontSize: 13, fontWeight: 600, marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}>
-                <Icons.AlertIcon size={18} /> Registration Failed
+                <Icons.AlertIcon size={18} /> Rejection Notification
               </div>
               <p style={{ color: "#666", fontSize: 12, marginBottom: 12, lineHeight: 1.5 }}>
-                Your registration was not approved by our team. You can try again by completing the verification process from the beginning.
+                {error}
               </p>
               <button
                 onClick={handleRestartRegistration}
@@ -309,7 +296,7 @@ function LoginScreen({ navigate, state, setState }) {
                   width: "100%"
                 }}
               >
-                Retry Registration
+                Try Again
               </button>
             </div>
           )}
@@ -324,36 +311,27 @@ function LoginScreen({ navigate, state, setState }) {
           </button>
         </div>
 
-        {/* Social Login Buttons */}
-        <div style={{ marginTop: 24 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 12, color: "#aaa", fontSize: 13, marginBottom: 16 }}>
-            <div style={{ flex: 1, height: "1px", background: "#e0e0e0" }} />
-            <span>Or continue with</span>
-            <div style={{ flex: 1, height: "1px", background: "#e0e0e0" }} />
-          </div>
-          <div style={{ display: "flex", gap: 12 }}>
-            <button
-              className="social-btn"
-              onClick={() => handleSocial('google')}
-              disabled={loading}
-              style={{ flex: 1, position: 'relative' }}
-            >
-              {loading ? <div className="spinner" style={{ width: 16, height: 16, borderTopColor: DARK, margin: '0 auto' }} /> : <span style={{ fontSize: 18 }}>G</span>}
-            </button>
-            <button
-              className="social-btn"
-              onClick={() => handleSocial('apple')}
-              disabled={loading}
-              style={{ flex: 1, position: 'relative' }}
-            >
-              {loading ? <div className="spinner" style={{ width: 16, height: 16, borderTopColor: DARK, margin: '0 auto' }} /> : <span style={{ fontSize: 18 }}>Apple</span>}
-            </button>
-          </div>
-        </div>
-
-        <p style={{ textAlign: "center", marginTop: 24, color: "#888", fontSize: 14 }}>
-          Don't have an account?{" "}
-          <span style={{ color: DARK, fontWeight: 700, cursor: "pointer" }} onClick={() => navigate("register")}>Create one</span>
+        <p style={{ textAlign: "center", marginTop: 32, color: "#888", fontSize: 14 }}>
+          {error === "No account found with this number" ? (
+            <>
+              This account doesn't exist.{" "}
+              <span 
+                style={{ color: EMERALD, fontWeight: 700, cursor: "pointer", textDecoration: "underline" }} 
+                onClick={() => {
+                  const cleanPhone = phone.trim().replace(/\D/g, '');
+                  setState(s => ({ ...s, user: { ...s.user, phone: cleanPhone, role: 'user', status: null } }));
+                  navigate("register");
+                }}
+              >
+                Sign Up now
+              </span> to start riding!
+            </>
+          ) : (
+            <>
+              Don't have an account?{" "}
+              <span style={{ color: DARK, fontWeight: 700, cursor: "pointer" }} onClick={() => navigate("register")}>Create one</span>
+            </>
+          )}
         </p>
       </div>
     </div>

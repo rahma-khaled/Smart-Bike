@@ -1,10 +1,6 @@
 // Damietta bike locations (actual lat/lng near city center)
 export const DAMIETTA_BIKES = [
-  { lat: 31.4175, lng: 31.8144, id: "A24", battery: "120 M", status: "Unlocked", rate: "0.5 EGP / Min" },
-  { lat: 31.4220, lng: 31.8200, id: "B04", battery: "80 M", status: "Locked", rate: "0.5 EGP / Min" },
-  { lat: 31.4100, lng: 31.8080, id: "C12", battery: "200 M", status: "Unlocked", rate: "0.6 EGP / Min" },
-  { lat: 31.4260, lng: 31.8050, id: "D07", battery: "150 M", status: "Unlocked", rate: "0.5 EGP / Min" },
-  { lat: 31.4130, lng: 31.8230, id: "E03", battery: "300 M", status: "Locked", rate: "0.4 EGP / Min" },
+  { lat: 0, lng: 0, id: "B-LOCAL", name: "My Test Bike", battery: "85 M", status: "Locked", rate: "5 EGP / Hr" }
 ];
 
 // Damietta geofence center and GLOBAL radius (700km for unrestricted testing)

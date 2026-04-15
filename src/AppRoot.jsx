@@ -11,8 +11,28 @@ export default function AppRoot() {
   const [state, setState] = useState({
     selectedBike: null,
     otpMethod: "sms",
-    user: { name: "", email: "", profilePic: "", role: "", phone: "", first: "", last: "", status: null },
-    bikes: DAMIETTA_BIKES.map(b => ({ ...b, locked: b.status === 'Locked', battery: Math.min(parseInt(b.battery) || 100, 100) })),
+    user: { name: "", email: "", profilePic: "", role: "", phone: "", first: "", last: "", status: null, rideHistory: [], startDockName: null },
+    bikes: DAMIETTA_BIKES.map(b => {
+      // Find if this bike is docked anywhere in our static docks
+      const dock = [
+        { id: "DOCK-DU-01", lat: 31.4398, lng: 31.6705, occupiedBy: "B-LOCAL" },
+        { id: "DOCK-CP-02", lat: 31.4285, lng: 31.6750, occupiedBy: null },
+        { id: "DOCK-BA-03", lat: 31.4550, lng: 31.6620, occupiedBy: null }
+      ].find(d => d.occupiedBy === b.id);
+      
+      return { 
+        ...b, 
+        locked: b.status === 'Locked', 
+        voltage: 4.2,
+        lat: dock ? dock.lat : b.lat,
+        lng: dock ? dock.lng : b.lng
+      };
+    }),
+    docks: [
+      { id: "DOCK-DU-01", name: "Damietta University", lat: 31.4398, lng: 31.6705, occupiedBy: "B-LOCAL", servoPos: 170, voltage: 4.2, capacity: 10, lcdMessage: "Welcome!" },
+      { id: "DOCK-CP-02", name: "Central Park Hub", lat: 31.4285, lng: 31.6750, occupiedBy: null, servoPos: 170, voltage: 4.2, capacity: 10, lcdMessage: "Ready to ride" },
+      { id: "DOCK-BA-03", name: "New Damietta Beach", lat: 31.4550, lng: 31.6620, occupiedBy: null, servoPos: 170, voltage: 3.1, capacity: 10, lcdMessage: "Solar charging..." }
+    ],
     users: [],
     isAdminMode: false
   });

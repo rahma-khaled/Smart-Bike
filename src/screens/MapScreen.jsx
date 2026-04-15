@@ -5,14 +5,19 @@ import StatusBar from '../components/common/StatusBar';
 import BackBtn from '../components/common/BackBtn';
 import LeafletMap from '../features/telemetry/LeafletMap';
 import { DAMIETTA_BIKES, DAMIETTA_GEOFENCE, pointInPolygon } from '../features/telemetry/geofence';
-import { calculateDistance } from '../features/telemetry/SensorGate.js';
+import { calculateDistance, simulateBluetoothScan } from '../features/telemetry/SensorGate.js';
 
-export default 
-function MapScreen({ navigate, state, setState }) {
+export default
+  function MapScreen({ navigate, state, setState }) {
   const [selectedBike, setSelectedBike] = useState(null);
+  // Handle bike object lookup derived from selected ID
+  const selectedBikeObj = state.bikes?.find(b => b.id === selectedBike) || null;
   const [showDrawer, setShowDrawer] = useState(false);
   const [userLocation, setUserLocation] = useState(null);
   const [timeLeft, setTimeLeft] = useState(0);
+  const [findingNearest, setFindingNearest] = useState(false);
+  const [nearestDock, setNearestDock] = useState(null); // { dock, distanceM }
+  const mapInstanceRef = useRef(null); // shared map ref for panning
   const btnBoxStyle = { width: 44, height: 44, borderRadius: 12, background: "white", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 12px rgba(0,0,0,0.15)" };
 
   // Watch global reservation timer
@@ -22,10 +27,10 @@ function MapScreen({ navigate, state, setState }) {
       const updateTimer = () => {
         const remaining = Math.max(0, state.user.activeReservation.expiresAt - Date.now());
         if (remaining === 0) {
-           setState(s => ({ ...s, user: { ...s.user, activeReservation: null } }));
-           clearInterval(interval);
+          setState(s => ({ ...s, user: { ...s.user, activeReservation: null } }));
+          clearInterval(interval);
         } else {
-           setTimeLeft(remaining);
+          setTimeLeft(remaining);
         }
       };
       updateTimer();
@@ -34,51 +39,53 @@ function MapScreen({ navigate, state, setState }) {
     return () => clearInterval(interval);
   }, [state.user?.activeReservation, setState]);
 
-  // start GPS tracking
+  // start GPS tracking — fallback to Damietta center for laptop/simulator
   useEffect(() => {
     let watchId;
+    const DAMIETTA_FALLBACK = { lat: 31.4398, lng: 31.6705 }; // Damietta University dock area
+
     if ('geolocation' in navigator) {
       navigator.geolocation.getCurrentPosition(
         (pos) => setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-        (err) => console.log('Map GPS Error Init:', err),
-        { enableHighAccuracy: true }
+        () => setUserLocation(DAMIETTA_FALLBACK), // GPS denied → use Damietta
+        { enableHighAccuracy: true, timeout: 6000 }
       );
       watchId = navigator.geolocation.watchPosition(
         (pos) => setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-        (err) => console.log('Map GPS Error:', err),
+        () => {},
         { enableHighAccuracy: true }
       );
+    } else {
+      setUserLocation(DAMIETTA_FALLBACK);
     }
-    // FORCE user location for pure laptop simulation with zero distance to B-LOCAL
-    const timeout = setTimeout(() => {
-      setUserLocation({ lat: 0, lng: 0 }); // Mock origin [0,0] for laptop simulation
-    }, 1000);
-    
+
     return () => {
       if (watchId) navigator.geolocation.clearWatch(watchId);
-      clearTimeout(timeout);
     };
   }, []);
 
-  // deriving bikes from state
+  // Pass ALL bikes from state (they already have real dock lat/lng from AppRoot init)
   const displayBikes = React.useMemo(() => {
-    // Only show the single B-LOCAL bike
-    const bikes = (state.bikes || []).filter(b => b.id === 'B-LOCAL');
-    
-    // Ensure B-LOCAL is at [0,0] for laptop simulation if no GPS
-    const idx = bikes.findIndex(b => b.id === 'B-LOCAL');
-    if (idx >= 0 && (!userLocation || (userLocation.lat === 0 && userLocation.lng === 0))) {
-      bikes[idx] = { ...bikes[idx], lat: 0, lng: 0 };
-    }
-    
-    return bikes;
-  }, [state.bikes, userLocation]);
+    return (state.bikes || []);
+  }, [state.bikes]);
 
   return (
     <div style={{ height: "100%", display: "flex", flexDirection: "column", background: "#fff" }}>
       {/* 60% Map Height - Locked with Z-Index for Mobile */}
-      <div style={{ height: selectedBike !== null ? '60dvh' : '100dvh', position: "relative", zIndex: 1, flex: selectedBike !== null ? 'none' : 1 }}>
-        <LeafletMap bikes={displayBikes} onBikeClick={i => setSelectedBike(i)} selectedBike={selectedBike} userLocation={userLocation} />
+      <div style={{ height: selectedBikeObj !== null ? '55dvh' : '100dvh', position: "relative", zIndex: 1, flex: selectedBikeObj !== null ? 'none' : 1, transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)' }}>
+        <LeafletMap
+          bikes={displayBikes}
+          docks={state.docks}
+          onBikeClick={id => {
+            // No longer navigating to scan immediately.
+            // Always show the info drawer first.
+            setSelectedBike(id);
+            setNearestDock(null); // clear nearest dock banner when a bike is chosen
+          }}
+          selectedBike={selectedBike}
+          userLocation={userLocation}
+          nearestDock={nearestDock?.dock || null}
+        />
       </div>
 
       {/* Map Empty State Layer */}
@@ -129,9 +136,9 @@ function MapScreen({ navigate, state, setState }) {
 
       {/* Right-side FABs */}
       <div style={{ position: "absolute", bottom: 90, right: 16, zIndex: 10, display: "flex", flexDirection: "column", gap: 10 }}>
-        <button 
-          style={{ ...btnBoxStyle, background: LIME }} 
-          aria-label="My location" 
+        <button
+          style={{ ...btnBoxStyle, background: LIME }}
+          aria-label="My location"
           onClick={() => {
             if (navigator.geolocation) {
               navigator.geolocation.getCurrentPosition((pos) => {
@@ -154,176 +161,263 @@ function MapScreen({ navigate, state, setState }) {
         </button>
       </div>
 
-      {selectedBike === null ? (
-        <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, padding: "0 16px 32px", zIndex: 10, display: "flex", justifyContent: "center" }}>
-          {/* ... (content remains) */}
-          {(() => {
-              const closestBikeDist = userLocation && displayBikes.length > 0 
-                ? Math.min(...displayBikes.map(b => calculateDistance(userLocation.lat, userLocation.lng, b.lat, b.lng))) 
-                : Infinity;
-              const anyNear = closestBikeDist <= 50 || displayBikes.some(b => b.id === 'B-LOCAL');
+      {selectedBikeObj === null ? (
+        <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, padding: "0 16px 32px", zIndex: 10, display: "flex", flexDirection: 'column', alignItems: 'center', gap: 12 }}>
 
-            return (
-              <button 
-                className="btn-primary" 
-                disabled={!anyNear}
-                style={{ 
-                  boxShadow: "0 4px 20px rgba(0,0,0,0.2)",
-                  background: anyNear ? LIME : "#444", color: anyNear ? DARK : "#888", cursor: anyNear ? "pointer" : "not-allowed"
-                }} 
-                onClick={() => {
-                  const local = displayBikes.find(b => b.id === 'B-LOCAL');
-                  if (local) setState(s => ({ ...s, selectedBike: local }));
-                  navigate("scanQR");
-                }}
-              >
-                <Icons.QRScanIcon size={18} color={anyNear ? DARK : "#888"} /> 
-                {anyNear ? "Scan To Ride" : `Too far (${closestBikeDist > 1000 ? (closestBikeDist/1000).toFixed(1)+'km' : closestBikeDist+'m'})`}
-              </button>
-            );
-          })()}
-        </div>
-      ) : (
-        <div style={{ flex: 4, background: "#fff", borderTop: "1px solid #eee", padding: "16px 20px env(safe-area-inset-bottom, 40px)", zIndex: 10, display: "flex", flexDirection: "column", boxShadow: "0 -4px 20px rgba(0,0,0,0.05)" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-            <div>
-              <div style={{ fontWeight: 800, fontSize: 18, fontFamily: "'Space Grotesk',sans-serif" }}>Bike #{displayBikes[selectedBike]?.id || ''}</div>
-              <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 6 }}>
-                <span style={{ color: "#888", fontSize: 13, display: "flex", alignItems: "center", gap: 6 }}>
-                  <Icons.BatteryIconSVG size={16} color="#888" /> {displayBikes[selectedBike]?.battery} battery
-                </span>
-                <span style={{ color: "#888", fontSize: 13, display: "flex", alignItems: "center", gap: 6 }}>
-                  <Icons.PadlockIcon size={16} color="#888" /> {displayBikes[selectedBike]?.status || ''}
-                </span>
+          {/* Nearest Dock Info Banner */}
+          {nearestDock && (
+            <div style={{
+              width: '100%', maxWidth: 450,
+              background: 'rgba(17,17,17,0.92)', backdropFilter: 'blur(12px)',
+              borderRadius: 20, padding: '14px 18px',
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              boxShadow: '0 8px 32px rgba(0,0,0,0.25)',
+              border: '1px solid rgba(255,255,255,0.1)',
+              animation: 'slideUpMap 0.35s ease-out'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                <div style={{
+                  width: 40, height: 40, background: '#007AFF', borderRadius: 10,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  flexShrink: 0, boxShadow: '0 0 0 4px rgba(0,122,255,0.2)'
+                }}>
+                  <Icons.LocationIcon size={20} color="white" />
+                </div>
+                <div>
+                  <div style={{ color: 'white', fontWeight: 800, fontSize: 14, fontFamily: "'Space Grotesk',sans-serif" }}>
+                    📍 {nearestDock.dock.name || 'Nearest Dock'}
+                  </div>
+                  <div style={{ color: '#CCFF00', fontWeight: 700, fontSize: 13, marginTop: 2 }}>
+                    {nearestDock.distanceM < 1000
+                      ? `${nearestDock.distanceM} m away`
+                      : `${(nearestDock.distanceM / 1000).toFixed(1)} km away`
+                    } · Tap the dock on the map
+                  </div>
+                </div>
               </div>
+              <button
+                onClick={() => setNearestDock(null)}
+                style={{ background: 'rgba(255,255,255,0.12)', border: 'none', color: 'white', width: 30, height: 30, borderRadius: '50%', cursor: 'pointer', fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+              >✕</button>
             </div>
-            <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8 }}>
-              <div style={{ width: 44, height: 44, background: "#f5f5f5", borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <Icons.BikeIconSVG size={32} color={DARK} />
-              </div>
-              <button style={{ background: "none", border: "none", cursor: "pointer", color: "#888", display: 'flex' }} onClick={() => setSelectedBike(null)}>
-                <Icons.XIcon size={20} color="#888" />
-              </button>
-            </div>
-          </div>
-          <div style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 8, flex: 1, justifyContent: "flex-end" }}>
-            {(() => {
-              const bike = displayBikes[selectedBike];
-              const dist = (userLocation && bike?.lat && bike?.lng)
-                ? calculateDistance(userLocation.lat, userLocation.lng, bike.lat, bike.lng)
-                : Infinity;
-              const isTestBike = bike?.id === 'B-LOCAL' || bike?.id === 'B-TEST';
-              const tooFar = isTestBike ? false : dist > 20;
+          )}
 
-              const isVodafoneLinked = state.user?.paymentMethod?.type === 'Vodafone Cash' && state.user?.paymentMethod?.number;
+          <button
+            className="btn-primary"
+            style={{
+              boxShadow: "0 4px 24px rgba(0,0,0,0.25)",
+              background: findingNearest ? '#ccc' : LIME, color: DARK, cursor: findingNearest ? 'not-allowed' : 'pointer',
+              height: 58, borderRadius: 18, width: '100%', maxWidth: 450,
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12,
+              fontWeight: 800, fontSize: 17, border: 'none',
+              transition: 'background 0.3s'
+            }}
+            disabled={findingNearest}
+            onClick={() => {
+              setFindingNearest(true);
 
-              if (!isVodafoneLinked) {
-                return (
-                  <button className="btn-primary" style={{ background: "#f39c12", color: "#111" }} onClick={() => navigate("editProfile")}>
-                    <Icons.PhoneIcon size={18} color="#111" /> Link Vodafone Cash
-                  </button>
+              const doFind = (lat, lng) => {
+                // Find docks that have a bike (occupiedBy !== null)
+                const docksWithBike = (state.docks || []).filter(d => d.occupiedBy && d.lat && d.lng);
+
+                if (docksWithBike.length === 0) {
+                  alert('No available bikes found in any dock right now.');
+                  setFindingNearest(false);
+                  return;
+                }
+
+                // Sort by distance from user
+                let nearest = null;
+                let minDist = Infinity;
+                docksWithBike.forEach(d => {
+                  const dist = calculateDistance(lat, lng, d.lat, d.lng);
+                  if (dist < minDist) {
+                    minDist = dist;
+                    nearest = d;
+                  }
+                });
+
+                if (nearest) {
+                  // Show the nearest dock banner — user clicks the dock themselves
+                  setNearestDock({ dock: nearest, distanceM: Math.round(minDist) });
+                }
+                setFindingNearest(false);
+              };
+
+              if (userLocation) {
+                doFind(userLocation.lat, userLocation.lng);
+              } else {
+                navigator.geolocation.getCurrentPosition(
+                  (pos) => doFind(pos.coords.latitude, pos.coords.longitude),
+                  () => {
+                    // Fallback: use mock origin if GPS fails
+                    doFind(0, 0);
+                  },
+                  { enableHighAccuracy: true, timeout: 5000 }
                 );
               }
-
-              return tooFar ? (
-                <button 
-                  className="btn-primary" 
-                  disabled 
-                >
-                  <Icons.QRScanIcon size={18} color="#888" /> 
-                  Move Closer ({(dist/1000).toFixed(2)}km)
-                </button>
-              ) : (
-                <button className="btn-primary" onClick={async () => {
-                  setState(s => ({ ...s, selectedBike: bike }));
-                  
-                  // ── REAL BLUETOOTH HANDSHAKE ──
-                  // Skip for Demo User for "Instant" experience
-                  const isDemo = state.user?.phone === '01000000000';
-                  if (!isDemo) {
-                    const bleOk = await simulateBluetoothScan(bike.id);
-                    if (!bleOk) {
-                      alert("Bluetooth Error: Please enable Bluetooth to connect to the smart lock.");
-                      return;
-                    }
-                  }
-                  
-                  navigate("scanQR");
-                }}>
-                  <Icons.QRScanIcon size={18} color={DARK} /> Scan To Unlock
-                </button>
-              );
-            })()}
-
-            {isVodafoneLinked && (
-               <button className="btn-outline" style={{ border: 'none', color: '#888', fontWeight: 700, fontSize: 13 }} onClick={() => { 
-                if (displayBikes[selectedBike]) {
-                  setState(s => ({ ...s, selectedBike: displayBikes[selectedBike] })); 
-                  navigate("reserve"); 
-                }
-              }}>Reserve (Hold 15 mins)</button>
+            }}
+          >
+            {findingNearest ? (
+              <>
+                <div className="spinner" style={{ width: 20, height: 20, border: '3px solid rgba(0,0,0,0.15)', borderTopColor: DARK, borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+                Locating nearest dock...
+              </>
+            ) : (
+              <>
+                <Icons.LocationIcon size={22} color={DARK} />
+                Find Nearest Dock
+              </>
             )}
+          </button>
+        </div>
+      ) : (
+        <div style={{
+          position: 'absolute', bottom: 0, left: 0, right: 0,
+          background: "#fff",
+          borderTopLeftRadius: 36,
+          borderTopRightRadius: 36,
+          padding: "16px 24px env(safe-area-inset-bottom, 32px)",
+          zIndex: 100,
+          display: "flex",
+          flexDirection: "column",
+          boxShadow: "0 -10px 40px rgba(0,0,0,0.12)",
+          animation: 'slideUpMap 0.4s ease-out'
+        }}>
+          {/* Handlebar */}
+          <div style={{ width: 44, height: 6, background: '#E0E0E0', borderRadius: 3, margin: '0 auto 20px' }} />
+
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: 800, fontSize: 22, fontFamily: "'Space Grotesk',sans-serif", color: DARK, marginBottom: 16 }}>
+                Bike #{selectedBikeObj.id || 'N/A'}
+              </div>
+
+              {/* Stats Rows */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div style={{ width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Icons.LocationIcon size={20} color={DARK} />
+                  </div>
+                  <span style={{ fontSize: 15, color: '#999', fontWeight: 600 }}>120 M Range</span>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div style={{ width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Icons.ClockIcon size={20} color={DARK} />
+                  </div>
+                  <span style={{ fontSize: 15, color: '#999', fontWeight: 600 }}>2 Min Walking</span>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div style={{ width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Icons.WalletIcon size={20} color={DARK} />
+                  </div>
+                  <span style={{ fontSize: 15, color: '#999', fontWeight: 600 }}>{selectedBikeObj.rate || '0.5 EGP'} / Min, 20 /Hour</span>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ position: 'relative' }}>
+              <button
+                style={{ position: 'absolute', top: -10, right: -10, width: 36, height: 36, borderRadius: '50%', background: "#F5F6F7", border: "none", cursor: "pointer", display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2 }}
+                onClick={() => setSelectedBike(null)}
+              >
+                <Icons.XIcon size={18} color={DARK} />
+              </button>
+              <img
+                src="./src/assets/bike_illustration.png"
+                alt="Bike"
+                style={{ width: 140, height: 'auto', objectFit: 'contain' }}
+              />
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 20 }}>
+            <button
+              className="btn-primary"
+              style={{
+                height: 60, borderRadius: 16, background: LIME, color: DARK,
+                fontWeight: 900, fontSize: 18, border: 'none', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10
+              }}
+              onClick={() => {
+                const bike = selectedBikeObj;
+                setState(s => ({ ...s, selectedBike: bike }));
+                navigate("scanQR");
+              }}
+            >
+              <Icons.QRScanIcon size={22} color={DARK} />
+              Scan To Unlock
+            </button>
+
+            <button
+              className="btn-outline"
+              style={{
+                height: 54, borderRadius: 16, border: '1.5px solid #111', color: DARK,
+                fontWeight: 800, fontSize: 16, background: 'transparent', cursor: 'pointer'
+              }}
+              onClick={() => {
+                const bike = selectedBikeObj;
+                setState(s => ({ ...s, selectedBike: bike }));
+                navigate("reserve");
+              }}
+            >
+              Reserve
+            </button>
           </div>
         </div>
       )}
 
       {/* Side Drawer */}
       {showDrawer && (
-        <div className="drawer-overlay">
+        <div className="drawer-overlay" style={{ zIndex: 1000 }}>
           <div className="drawer-bg" onClick={() => setShowDrawer(false)} />
-          <div className="drawer">
-            <div style={{ background: LIME, padding: "60px 20px 32px" }}>
-              <div 
-                style={{ display: "flex", alignItems: "center", gap: 12, cursor: "pointer" }}
-                onClick={() => { 
-                  setShowDrawer(false); 
+          <div className="drawer" style={{ animation: 'slideRight 0.3s ease-out' }}>
+            <div style={{ background: LIME, padding: "60px 24px 36px", borderBottomLeftRadius: 30 }}>
+              <div
+                style={{ display: "flex", alignItems: "center", gap: 16, cursor: "pointer" }}
+                onClick={() => {
+                  setShowDrawer(false);
                   localStorage.setItem('admin_mode', 'true');
                   setState(s => ({ ...s, isAdminMode: true }));
-                  navigate('adminDashboard'); 
+                  navigate('adminDashboard');
                 }}
-                title="Switch to Admin Mode"
               >
-                <div className="profile-img" style={{ background: "#fff", width: 64, height: 64, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: "50%", overflow: "hidden" }}>
-                  {state.user.profilePic ? (
-                    <img src={state.user.profilePic} alt="avatar" style={{ width: '100%', height: '100%', borderRadius: '50%' }} />
+                <div style={{ width: 72, height: 72, background: DARK, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", border: '4px solid white' }}>
+                  {state.user?.profilePic ? (
+                    <img src={state.user.profilePic} alt="avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                   ) : (
-                    <div style={{ width: 64, height: 64, background: DARK, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                      <Icons.UserSettingsIcon size={28} color="white" />
-                    </div>
+                    <Icons.UserIcon size={32} color="white" />
                   )}
                 </div>
                 <div>
-                  <div style={{ fontWeight: 700, fontSize: 17, fontFamily: "'Space Grotesk',sans-serif" }}>{state.user.name || 'User Name'}</div>
-                  {state.user.email && <div style={{ fontSize: 13, color: '#555', marginTop: 4 }}>{state.user.email}</div>}
+                  <div style={{ fontWeight: 800, fontSize: 19, fontFamily: "'Space Grotesk',sans-serif", color: DARK }}>{state.user?.name || 'Smart User'}</div>
+                  <div style={{ fontSize: 13, color: '#333', marginTop: 4, fontWeight: 600 }}>{state.user?.phone || 'No phone'}</div>
                 </div>
               </div>
-              <button className="btn-outline" style={{ marginTop: 16, background: "white", borderColor: DARK }} onClick={() => { setShowDrawer(false); navigate("profile"); }}>View Profile</button>
             </div>
-            <div style={{ padding: "16px 0" }}>
-              {(() => {
-                const items = [
-                  { icon: <Icons.BikeIconSVG size={20} color={DARK} />, label: "Rides History", screen: "history" },
-                  { icon: <Icons.LocationIcon size={20} color={DARK} />, label: "How To Ride?", screen: "howToRide" },
-                  { icon: <Icons.UserSettingsIcon size={20} color={DARK} />, label: "Settings", screen: "settings" },
-                  { icon: <Icons.AlertIcon size={20} color="#FF9800" />, label: "Report Issue", screen: "reportIssue" },
-                ];
-                if (state.user.role === 'admin' || state.user.role === 'super_admin') {
-                  items.unshift({ icon: <Icons.UserSettingsIcon size={20} color={DARK} />, label: 'Admin Dashboard', screen: 'adminDashboard' });
-                }
-                return items.map(item => (
-                  <button
-                    key={item.label}
-                    style={{ width: "100%", display: "flex", alignItems: "center", gap: 14, padding: "16px 20px", background: "none", border: "none", cursor: "pointer", fontSize: 15, fontWeight: 600, fontFamily: "'DM Sans',sans-serif", color: DARK, transition: "background 0.15s" }}
-                    onClick={() => { setShowDrawer(false); navigate(item.screen); }}
-                  >
-                    {item.icon} {item.label}
-                  </button>
-                ));
-              })()}
+            <div style={{ padding: "24px 0" }}>
+              {[
+                { icon: <Icons.BikeIconSVG size={22} color={DARK} />, label: "My Rides", screen: "history" },
+                { icon: <Icons.WalletIcon size={22} color={DARK} />, label: "Payment Methods", screen: "wallet" },
+                { icon: <Icons.HelpCircleIcon size={22} color={DARK} />, label: "How to Ride", screen: "howToRide" },
+                { icon: <Icons.UserSettingsIcon size={22} color={DARK} />, label: "Settings", screen: "settings" },
+                { icon: <Icons.AlertIcon size={22} color="#f44336" />, label: "Report Issue", screen: "reportIssue" },
+              ].map(item => (
+                <button
+                  key={item.label}
+                  style={{ width: "100%", display: "flex", alignItems: "center", gap: 18, padding: "18px 28px", background: "none", border: "none", cursor: "pointer", fontSize: 16, fontWeight: 700, color: DARK }}
+                  onClick={() => { setShowDrawer(false); navigate(item.screen); }}
+                >
+                  {item.icon} {item.label}
+                </button>
+              ))}
             </div>
           </div>
         </div>
       )}
+
     </div>
   );
 }

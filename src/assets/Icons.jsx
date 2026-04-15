@@ -210,6 +210,13 @@ export const IdCardIcon = ({ size = 20, color = "#111" }) => (
   </svg>
 );
 
+export const FlashlightIcon = ({ size = 20, color = "#111" }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M9.5 2v4l-2 3v13h9V9l-2-3V2H9.5z"/>
+    <line x1="9" y1="6" x2="15" y2="6"/>
+  </svg>
+);
+
 // ===== RECOVERED / MISSING ICONS FOR ADMIN & RECENT SCREENS =====
 
 export const DotIcon = ({ size = 8, color = "#888", style = {} }) => (

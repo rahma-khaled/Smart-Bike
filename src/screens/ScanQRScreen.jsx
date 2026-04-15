@@ -3,17 +3,17 @@ import { LIME, DARK } from '../constants/theme.js';
 import * as Icons from '../assets/Icons.jsx';
 import StatusBar from '../components/common/StatusBar';
 import BackBtn from '../components/common/BackBtn';
-import { calculateDistance, simulateBluetoothScan } from '../features/telemetry/SensorGate.js';
+import { calculateDistance, simulateBluetoothScan, simulateDockUnlock } from '../features/telemetry/SensorGate.js';
 
-export default 
-function ScanQRScreen({ navigate, state }) {
+export default
+  function ScanQRScreen({ navigate, state }) {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const [cameraStream, setCameraStream] = useState(null);
   const [scanning, setScanning] = useState(false);
   const [error, setError] = useState("");
   const [scannedCode, setScannedCode] = useState(null);
-  
+
   // SensorGate states
   const [handshakeStep, setHandshakeStep] = useState("idle"); // idle, gps, ble, success, manual_input
   const [permissionStatus, setPermissionStatus] = useState("pending"); // pending, granted, denied
@@ -31,12 +31,18 @@ function ScanQRScreen({ navigate, state }) {
   // Auto-trigger Sensor Gate immediately on mount if permission granted
   useEffect(() => {
     if ((state.user?.status === 'verified' || state.user?.status === 'approved') && permissionStatus === 'granted') {
-       initiateSensorGate(false);
+      initiateSensorGate(false);
     }
   }, [permissionStatus]);
 
   // Start the Triple Handshake (GPS -> BLE -> Initialize Camera)
   async function initiateSensorGate(isManual = false) {
+    if (!state.user?.paymentMethod || state.user?.paymentMethod?.type !== 'Vodafone Cash' || !state.user?.paymentMethod?.number) {
+      setError("Please add your Vodafone Cash number in your Profile before starting a ride.");
+      setHandshakeStep("idle");
+      return;
+    }
+
     if (isManual) {
       setHandshakeStep("manual_input");
       return;
@@ -68,7 +74,7 @@ function ScanQRScreen({ navigate, state }) {
       setHandshakeStep("ble");
       const bleSuccess = await simulateBluetoothScan(targetBike?.id);
       if (!bleSuccess) {
-        setError("Bluetooth Error: Could not establish a hardware connection to the bike.");
+        setError("Please stay close to the bike and ensure Bluetooth is on to unlock.");
         setHandshakeStep("idle");
         return;
       }
@@ -83,10 +89,10 @@ function ScanQRScreen({ navigate, state }) {
           if (videoRef.current) videoRef.current.srcObject = stream;
         })
         .catch(err => {
-           console.error('Camera error:', err);
-           setError('Camera access requested but denied or unavailable. Please use the [Mock Scan Success] button or Manual Entry.');
-           setScanning(true); 
-           setHandshakeStep("idle");
+          console.error('Camera error:', err);
+          setError('Camera access requested but denied or unavailable. Please use the [Mock Scan Success] button or Manual Entry.');
+          setScanning(true);
+          setHandshakeStep("idle");
         });
 
     }, (err) => {
@@ -136,7 +142,7 @@ function ScanQRScreen({ navigate, state }) {
     return () => clearInterval(interval);
   }, [scanning, initialTargetId]);
 
-  function handleUnlockSuccess(code) {
+  async function handleUnlockSuccess(code) {
     try {
       const audioContext = new (window.AudioContext || window.webkitAudioContext)();
       const osc = audioContext.createOscillator();
@@ -146,7 +152,7 @@ function ScanQRScreen({ navigate, state }) {
       gain.gain.setValueAtTime(0.3, audioContext.currentTime);
       gain.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.2);
       osc.start(audioContext.currentTime); osc.stop(audioContext.currentTime + 0.2);
-    } catch (e) {}
+    } catch (e) { }
 
     setScannedCode(code);
     setScanning(false);
@@ -155,22 +161,50 @@ function ScanQRScreen({ navigate, state }) {
       setCameraStream(null);
     }
 
-    // Set ride state globals (timer & billing starts here now, not on reservation!)
-    setTimeout(() => {
-      navigate('riding');
-    }, 1500);
+    // Bike parsing from code (e.g. QR-B005 or MANUAL-B-004)
+    const bikeIdMatch = code.match(/(?:QR|MANUAL)-(.*)/);
+    const resolvedBikeId = bikeIdMatch ? bikeIdMatch[1] : (initialTargetId || 'B-LOCAL');
+
+    // Find the dock that holds this bike
+    const dock = state.docks?.find(d => d.occupiedBy === resolvedBikeId) || state.docks?.[0]; // Fallback to dock 1 for demo if needed
+
+    if (dock) {
+      // Send ESP32 Servo Unlock explicitly to the dock
+      await simulateDockUnlock(dock.id);
+
+      // Update global state: dock is empty, bike is unlocked, and record startDockName
+      if (typeof setState === 'function') {
+        setState(s => ({
+          ...s,
+          selectedBike: s.bikes.find(b => b.id === resolvedBikeId) || { id: resolvedBikeId },
+          user: { ...s.user, startDockName: dock.name },
+          docks: s.docks.map(d => d.occupiedBy === resolvedBikeId || d.id === dock.id ? { ...d, occupiedBy: null, servoPos: 10 } : d),
+          bikes: s.bikes.map(b => b.id === resolvedBikeId ? { ...b, locked: false } : b)
+        }));
+      }
+    }
+
+    // Navigate immediately after servo triggers — timer starts on RidingScreen mount
+    navigate('riding');
   }
 
   // Secure Manual Input fallback submission (ALSO executes Triple Handshake!)
   function submitManualId() {
     if (!manualId || manualId.trim().length === 0) return;
-    setHandshakeStep("manual_gps");
     
+    if (!state.user?.paymentMethod || state.user?.paymentMethod?.type !== 'Vodafone Cash' || !state.user?.paymentMethod?.number) {
+      setError("Please add your Vodafone Cash number in your Profile before starting a ride.");
+      setHandshakeStep("idle");
+      return;
+    }
+
+    setHandshakeStep("manual_gps");
+
     // Step 1 for Manual: GPS
     navigator.geolocation.getCurrentPosition(async (pos) => {
       let targetBike = state.bikes?.find(b => b.id === manualId.trim()) || selectedBike;
       const isTestBike = manualId.trim() === 'B-LOCAL' || manualId.trim() === 'B-TEST';
-      
+
       // Override manual entry as well
       if (isTestBike) {
         return handleUnlockSuccess(`MANUAL-${manualId}`);
@@ -189,7 +223,7 @@ function ScanQRScreen({ navigate, state }) {
       const bleSuccess = await simulateBluetoothScan(targetBike.id);
 
       if (!bleSuccess) {
-        setError("Bluetooth Error: Bike hardware unresponsive.");
+        setError("Please stay close to the bike and ensure Bluetooth is on to unlock.");
         setHandshakeStep("manual_input");
         return;
       }
@@ -209,13 +243,13 @@ function ScanQRScreen({ navigate, state }) {
       {permissionStatus === "pending" && !scannedCode && (
         <div className="modal-overlay modal-overlay-center" style={{ zIndex: 100 }}>
           <div className="modal-card" style={{ padding: 32, textAlign: 'center' }}>
-             <div style={{ width: 64, height: 64, background: '#e8ffc0', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
-                <Icons.ShieldCheckIcon size={32} color={DARK} />
-             </div>
-             <h2 style={{ fontSize: 22, fontWeight: 800, marginBottom: 12, fontFamily: "'Space Grotesk',sans-serif" }}>Permissions Required</h2>
-             <p style={{ color: '#666', fontSize: 15, lineHeight: 1.6, marginBottom: 24 }}>To unlock a bike, we need access to your <b>Camera</b> (to scan QR) and <b>Location</b> (to verify you are near the bike).</p>
-             <button className="btn-primary" style={{ width: '100%' }} onClick={() => setPermissionStatus('granted')}>Allow Access</button>
-             <button className="btn-outline" style={{ width: '100%', marginTop: 12 }} onClick={() => navigate('map')}>Not Now</button>
+            <div style={{ width: 64, height: 64, background: '#e8ffc0', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
+              <Icons.ShieldCheckIcon size={32} color={DARK} />
+            </div>
+            <h2 style={{ fontSize: 22, fontWeight: 800, marginBottom: 12, fontFamily: "'Space Grotesk',sans-serif" }}>Permissions Required</h2>
+            <p style={{ color: '#666', fontSize: 15, lineHeight: 1.6, marginBottom: 24 }}>To unlock a bike, we need access to your <b>Camera</b> (to scan QR) and <b>Location</b> (to verify you are near the bike).</p>
+            <button className="btn-primary" style={{ width: '100%' }} onClick={() => setPermissionStatus('granted')}>Allow Access</button>
+            <button className="btn-outline" style={{ width: '100%', marginTop: 12 }} onClick={() => navigate('map')}>Not Now</button>
           </div>
         </div>
       )}
@@ -240,11 +274,11 @@ function ScanQRScreen({ navigate, state }) {
         <div style={{ position: "absolute", top: 120, left: 24, right: 24, background: "white", borderRadius: 16, padding: 24, zIndex: 20 }}>
           <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 16, fontFamily: "'Space Grotesk',sans-serif" }}>Manual Override</div>
           <p style={{ fontSize: 14, color: "#666", marginBottom: 16 }}>Enter the 6-character Bike ID written under the saddle. You must be next to the bike to unlock it.</p>
-          <input 
-            type="text" 
-            placeholder="e.g. B-004" 
-            className="input-field" 
-            value={manualId} 
+          <input
+            type="text"
+            placeholder="e.g. B-004"
+            className="input-field"
+            value={manualId}
             onChange={(e) => { setManualId(e.target.value.toUpperCase()); setError(""); }}
             style={{ marginBottom: 16, border: "2px solid #eee", fontSize: 16, letterSpacing: 1 }}
           />
@@ -285,7 +319,7 @@ function ScanQRScreen({ navigate, state }) {
       {/* QR Scanner Overlay */}
       {scanning && (
         <>
-          <div className="qr-scanner-overlay">
+          <div className="qr-scanner-overlay" style={{ pointerEvents: 'none' }}>
             <div className="qr-frame">
               <div className="qr-corner tl" />
               <div className="qr-corner tr" />
@@ -293,12 +327,12 @@ function ScanQRScreen({ navigate, state }) {
               <div className="qr-corner br" />
               <div className="scan-line" />
             </div>
-            <p style={{ color: "rgba(255,255,255,0.7)", fontSize: 14, marginBottom: 32, textAlign: "center", position: "absolute", bottom: 140 }}>Position QR code within the frame</p>
           </div>
-          <div style={{ position: "absolute", bottom: 100, left: 16, right: 16, zIndex: 100, display: "flex", justifyContent: "center" }}>
-            <button className="btn-primary" onClick={() => handleUnlockSuccess(`QR-${initialTargetId || 'B-LOCAL'}`)} style={{ background: LIME, color: "#111", border: "2px solid #111", width: "100%", maxWidth: 300, boxShadow: "0 4px 20px rgba(204,255,0,0.4)" }}>
+          <div style={{ position: "absolute", bottom: 120, left: 24, right: 24, zIndex: 1000, display: "flex", flexDirection: "column", gap: 12, alignItems: "center" }}>
+            <button className="btn-primary" onClick={() => handleUnlockSuccess(`QR-${initialTargetId || 'B-LOCAL'}`)} style={{ background: LIME, color: "#111", border: "none", width: "100%", height: 56, borderRadius: 16, fontWeight: 800, fontSize: 16, boxShadow: "0 8px 32px rgba(204,255,0,0.3)" }}>
               [Mock Scan Success]
             </button>
+            <p style={{ color: "white", fontSize: 13, opacity: 0.7 }}>Testing Mode: Hard-bypass scan logic</p>
           </div>
         </>
       )}

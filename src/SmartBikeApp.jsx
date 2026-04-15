@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import './styles/main.css';
 import { SCREENS } from './navigation/ScreenRegistry';
 import { DAMIETTA_BIKES } from './features/telemetry/geofence';
+import * as Icons from './assets/Icons.jsx';
 
 // ── Error Boundary: prevents a white screen on any child crash ──
 class ErrorBoundary extends React.Component {

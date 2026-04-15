@@ -36,8 +36,35 @@ function LoginScreen({ navigate, state, setState }) {
     // Instead, admin status is evaluated post-lookup.
 
     const cleanPhone = input.replace(/\D/g, '');
-    
-    // Check if phone exists
+
+    // ── HARDCODED DEMO ACCOUNT BYPASS — runs BEFORE any DB lookup ──
+    if (cleanPhone === '01000000000') {
+      const pw = adminPassword;
+      const demoPasswordOk = pw === '12345678';
+      if (!demoPasswordOk) {
+        setError('Incorrect Password. Use 12345678 for the test account.');
+        return;
+      }
+      const demoUser = {
+        phone: '01000000000',
+        name: 'Guest Tester',
+        first: 'Guest',
+        last: 'Tester',
+        role: 'user',
+        status: 'verified',
+        phoneVerified: true,
+        paymentMethod: { type: 'Vodafone Cash', number: '01012345678' },
+        balance: 100.00,
+        profilePic: ''
+      };
+      setState(s => ({ ...s, user: demoUser, isAdminMode: false }));
+      localStorage.setItem('bike_app_user', JSON.stringify(demoUser));
+      localStorage.setItem('admin_mode', 'false');
+      navigate('map'); // Skip OTP — go directly to Map
+      return;
+    }
+
+    // Check if phone exists in DB
     setLoading(true);
     setTimeout(async () => {
       let existingUser = null;
@@ -52,39 +79,17 @@ function LoginScreen({ navigate, state, setState }) {
         // Step 2: Account Not Found
         setLoading(false);
         setError("No account found with this number");
-        // We will show a "Sign Up" button in the UI based on this specific error
         return;
       }
 
       // If user exists, check password
       // For demo, we use provided password and compare with stored or default 123456
-      const userPassword = existingUser.password || "123456";
+      const userPassword = existingUser.password || "12345678";
       const providedPassword = adminPassword; // adminPassword state used for general password
 
-      if (providedPassword !== userPassword && providedPassword !== "123456") {
+      if (providedPassword !== userPassword && providedPassword !== "12345678") {
         setLoading(false);
         setError("Incorrect Password. Please try again.");
-        return;
-      }
-
-      // ── HARDCODED DEMO ACCOUNT BYPASS ──
-      if (cleanPhone === '01000000000') {
-        const demoUser = {
-          phone: '01000000000',
-          name: 'Guest Tester',
-          first: 'Guest',
-          last: 'Tester',
-          role: 'user',
-          status: 'verified',
-          paymentMethod: { type: 'Vodafone Cash', number: '01012345678' },
-          balance: 100.00,
-          profilePic: ""
-        };
-        setState(s => ({ ...s, user: demoUser, isAdminMode: false }));
-        localStorage.setItem('bike_app_user', JSON.stringify(demoUser));
-        localStorage.setItem('admin_mode', 'false');
-        setLoading(false);
-        navigate('otp'); // Redirect to OTP for approved/verified
         return;
       }
 
@@ -220,7 +225,7 @@ function LoginScreen({ navigate, state, setState }) {
                   disabled={loading}
                 />
                 <p style={{ fontSize: 11, color: "#888", marginTop: 6, fontStyle: "italic" }}>
-                  For testing, use <span style={{ fontWeight: 700, color: DARK }}>01000000000</span> / <span style={{ fontWeight: 700, color: DARK }}>123456</span>
+                  For testing, use <span style={{ fontWeight: 700, color: DARK }}>01000000000</span> / <span style={{ fontWeight: 700, color: DARK }}>12345678</span>
                 </p>
               </div>
               {error && (

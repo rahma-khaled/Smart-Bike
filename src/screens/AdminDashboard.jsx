@@ -3,7 +3,7 @@ import { LIME, DARK } from '../constants/theme.js';
 import * as Icons from '../assets/Icons.jsx';
 import StatusBar from '../components/common/StatusBar';
 import BackBtn from '../components/common/BackBtn';
-
+import LeafletMap from '../features/telemetry/LeafletMap';
 export default 
 function AdminDashboard({ navigate, state, setState }) {
   const [section, setSection] = useState('users');
@@ -237,10 +237,11 @@ function AdminDashboard({ navigate, state, setState }) {
           <p style={{ fontSize: 13, color: "#555", margin: 0 }}>Manage users, hardware & monitoring</p>
         </div>
       </div>
-      <div style={{ display: "flex", padding: "0 24px", gap: 0, marginBottom: 10 }}>
-        {['users', 'bikes', 'monitor'].map(sec => (
-          <button key={sec} onClick={() => setSection(sec)} style={{ padding: "12px 20px", border: "none", borderBottom: section === sec ? `4px solid ${LIME}` : "4px solid transparent", background: "none", cursor: "pointer", fontWeight: section === sec ? 700 : 500, textAlign: 'center' }}>
-            {sec === 'users' ? 'User Verifications' : sec === 'bikes' ? 'Bike Management' : 'Live Monitoring'}
+      <div style={{ display: "flex", padding: "0 24px", gap: 0, marginBottom: 10, overflowX: 'auto' }}>
+        {['users', 'bikes', 'monitor', 'security'].map(sec => (
+          <button key={sec} onClick={() => setSection(sec)} style={{ padding: "12px 16px", border: "none", borderBottom: section === sec ? `4px solid ${sec === 'security' ? '#f44336' : LIME}` : "4px solid transparent", background: "none", cursor: "pointer", fontWeight: section === sec ? 700 : 500, textAlign: 'center', whiteSpace: 'nowrap', color: section === sec && sec === 'security' ? '#f44336' : 'inherit' }}>
+            {sec === 'users' ? 'User Verifications' : sec === 'bikes' ? 'Bike Management' : sec === 'monitor' ? 'Live Monitoring' : '🔴 Security Alerts'}
+            {sec === 'security' && alerts.length > 0 && <span style={{ marginLeft: 6, background: '#f44336', color: 'white', borderRadius: '50%', width: 18, height: 18, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800 }}>{alerts.length}</span>}
           </button>
         ))}
       </div>
@@ -323,9 +324,81 @@ function AdminDashboard({ navigate, state, setState }) {
           </>
         )}
         {section === 'monitor' && (
-          <><div style={{ marginBottom: 24 }}><div style={{ fontSize: 16, fontWeight: 700, marginBottom: 8, display: 'flex', alignItems: 'center' }}><Icons.ShieldAlertIcon size={18} style={{ marginRight: 6 }} />Triggered Alarms</div>{theftLogs.length === 0 ? (<p style={{ color: '#888' }}>Great! No bikes are currently being stolen.</p>) : (<ul style={{ paddingLeft: 20 }}>{theftLogs.map((a, idx) => <li key={idx} style={{ fontSize: 13, marginBottom: 4 }}>{new Date(a.time).toLocaleString()}: Bike {a.bikeId} – {a.message}</li>)}</ul>)}</div><div><div style={{ fontSize: 16, fontWeight: 700, marginBottom: 8, display: 'flex', alignItems: 'center' }}><Icons.BatteryIcon size={18} style={{ marginRight: 6 }} />Low Battery (&lt;10%)</div>
-{lowBattery.length === 0 ? (<p style={{ color: '#888' }}>All bike batteries are above 10%.</p>) : (<table style={{ width: '100%', borderCollapse: 'collapse' }}><thead><tr style={{ background: '#f8f8f8', borderBottom: '2px solid #eee' }}><th style={{ padding: 12, textAlign: 'left', fontWeight: 700, fontSize: 12, color: '#666' }}>Bike ID</th><th style={{ padding: 12, textAlign: 'center', fontWeight: 700, fontSize: 12, color: '#666' }}>Battery</th></tr></thead><tbody>{lowBattery.map(b => <tr key={b.id} style={{ borderBottom: '1px solid #eee' }}><td style={{ padding: 12 }}>{b.id}</td><td style={{ padding: 12, textAlign: 'center' }}>{b.battery}%</td></tr>)}</tbody></table>)}</div></>
+          <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 400 }}>
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ fontSize: 18, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div style={{ width: 12, height: 12, background: LIME, borderRadius: '50%', boxShadow: `0 0 10px ${LIME}`, animation: 'pulse 1.5s infinite' }} />
+                Live Fleet Tracking
+              </div>
+              <p style={{ color: '#888', fontSize: 13, marginTop: 4 }}>Real-time GPS coordinates of active bikes and docks.</p>
+            </div>
+            <div style={{ flex: 1, borderRadius: 16, overflow: 'hidden', border: '2px solid #ddd', minHeight: 300, position: 'relative', zIndex: 0 }}>
+              <LeafletMap bikes={state.bikes || []} docks={state.docks || []} />
+            </div>
+          </div>
         )}
+        {section === 'security' && (
+          <>
+            <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ fontSize: 18, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Icons.ShieldAlertIcon size={20} color="#f44336" />
+                Security Alerts
+              </div>
+              {alerts.length > 0 && (
+                <button
+                  onClick={() => { setAlerts([]); localStorage.setItem('alerts', '[]'); }}
+                  style={{ background: 'none', border: '1px solid #ddd', borderRadius: 8, padding: '4px 12px', cursor: 'pointer', fontSize: 12, color: '#888' }}
+                >
+                  Clear All
+                </button>
+              )}
+            </div>
+            {alerts.length === 0 ? (
+              <div style={{ background: 'white', borderRadius: 16, padding: 40, textAlign: 'center', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
+                <div style={{ width: 64, height: 64, background: '#e8f5e9', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+                  <Icons.ShieldCheckIcon size={32} color="#2e7d32" />
+                </div>
+                <div style={{ fontSize: 17, fontWeight: 700, marginBottom: 6 }}>All Clear</div>
+                <p style={{ color: '#888', fontSize: 14, margin: 0 }}>No active security alerts. All bikes are secure.</p>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {alerts.map((a, idx) => (
+                  <div key={idx} style={{
+                    background: '#fff5f5',
+                    border: '2px solid #ffcdd2',
+                    borderLeft: '5px solid #f44336',
+                    borderRadius: 12,
+                    padding: 16,
+                    display: 'flex',
+                    gap: 12,
+                    alignItems: 'flex-start'
+                  }}>
+                    <div style={{ width: 40, height: 40, background: '#ffebee', borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      <Icons.AlertTriangleIcon size={20} color="#f44336" />
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 700, fontSize: 14, color: '#c62828', marginBottom: 2 }}>ANTI-THEFT ALERT — Bike {a.bikeId}</div>
+                      <div style={{ fontSize: 13, color: '#555', marginBottom: 4 }}>{a.message}</div>
+                      <div style={{ fontSize: 11, color: '#aaa' }}>{new Date(a.time).toLocaleString()}</div>
+                    </div>
+                    <button
+                      onClick={() => {
+                        const updated = alerts.filter((_, i) => i !== idx);
+                        setAlerts(updated);
+                        localStorage.setItem('alerts', JSON.stringify(updated));
+                      }}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#aaa', padding: 4 }}
+                    >
+                      <Icons.XIcon size={16} color="#aaa" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+
       </div>
 
       {selectedUser && (

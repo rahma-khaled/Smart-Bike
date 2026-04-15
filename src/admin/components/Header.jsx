@@ -83,6 +83,25 @@ export default function Header({ search, setSearch, user, setScreen, setState })
               <button 
                 onClick={() => {
                   setShowProfileMenu(false);
+                  if (setState) {
+                     setState(s => ({ ...s, isAdminMode: false, user: { ...s.user, status: 'verified' } }));
+                     localforage.getItem('app_users').then(users => {
+                         if (users && user?.phone) {
+                             const updated = users.map(u => u.phone === user.phone ? { ...u, status: 'verified' } : u);
+                             localforage.setItem('app_users', updated);
+                         }
+                     });
+                  }
+                  if (setScreen) setScreen('map');
+                  navigate('/');
+                }} 
+                className="w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-white/5 hover:text-white transition-colors"
+              >
+                Exit to App
+              </button>
+              <button 
+                onClick={() => {
+                  setShowProfileMenu(false);
                   localStorage.removeItem('bike_app_user');
                   localStorage.removeItem('admin_mode');
                   if (setState) {

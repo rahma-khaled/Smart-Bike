@@ -20,11 +20,7 @@ import BikeFoundScreen from '../screens/BikeFoundScreen.jsx';
 import ScanQRScreen from '../screens/ScanQRScreen.jsx';
 import RidingScreen from '../screens/RidingScreen.jsx';
 import CallingScreen from '../screens/CallingScreen.jsx';
-import VerifyLockScreen from '../screens/VerifyLockScreen.jsx';
-import RideCompleteScreen from '../screens/RideCompleteScreen.jsx';
-import PaymentScreen from '../screens/PaymentScreen.jsx';
-import PaymentMethodScreen from '../screens/PaymentMethodScreen.jsx';
-import PaymentSuccessScreen from '../screens/PaymentSuccessScreen.jsx';
+
 import HistoryScreen from '../screens/HistoryScreen.jsx';
 import HowToRideScreen from '../screens/HowToRideScreen.jsx';
 import NotificationsScreen from '../screens/NotificationsScreen.jsx';
@@ -62,11 +58,6 @@ export const SCREENS = {
   scanQR: ScanQRScreen,
   riding: RidingScreen,
   calling: CallingScreen,
-  verifyLock: VerifyLockScreen,
-  rideComplete: RideCompleteScreen,
-  payment: PaymentScreen,
-  paymentMethod: PaymentMethodScreen,
-  paymentSuccess: PaymentSuccessScreen,
   history: HistoryScreen,
   howToRide: HowToRideScreen,
   notifications: NotificationsScreen,

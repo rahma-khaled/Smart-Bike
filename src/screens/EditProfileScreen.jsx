@@ -11,7 +11,6 @@ function EditProfileScreen({ navigate, state, setState }) {
     profilePic: state.user.profilePic || "",
     email: state.user.email || "",
     phone: state.user.phone || "",
-    password: state.user.password || "",
     paymentMethod: state.user.paymentMethod || null
   });
 
@@ -42,7 +41,7 @@ function EditProfileScreen({ navigate, state, setState }) {
             <div style={{ fontSize: 12, color: "#888", fontWeight: 600, marginBottom: 4 }}>{label}</div>
             <div style={{ display: "flex", alignItems: "center", borderBottom: "1px solid #eee", paddingBottom: 12, marginBottom: 12 }}>
               <input
-                type={key === 'password' ? 'password' : 'text'}
+                type={'text'}
                 style={{ flex: 1, background: "none", border: "none", outline: "none", fontSize: 15, fontWeight: 600, fontFamily: "'DM Sans',sans-serif" }}
                 value={form[key]}
                 onChange={e => setForm(p => ({ ...p, [key]: e.target.value }))}

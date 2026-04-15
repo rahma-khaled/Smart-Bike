@@ -3,11 +3,12 @@ export const DAMIETTA_BIKES = [
   { lat: 0, lng: 0, id: "B-LOCAL", name: "My Test Bike", battery: "85 M", status: "Locked", rate: "5 EGP / Hr" }
 ];
 
-// Damietta geofence center and GLOBAL radius (700km for unrestricted testing)
-export const DAMIETTA_CENTER = { lat: 31.4165, lng: 31.8133 };
-export const DAMIETTA_RADIUS = 700000; // 700,000 meters (Global Zone)
+// Damietta governorate center — covers Damietta, New Damietta, Ras El Bar,
+// Kafr Saad, Faraskour, Zarqa, El-Roda, and surrounding villages
+export const DAMIETTA_CENTER = { lat: 31.4175, lng: 31.8140 };
+export const DAMIETTA_RADIUS = 25000; // 25 km — covers full Damietta governorate
 
-// Damietta geofence polygon (keeping as secondary visual reference if needed)
+// Damietta geofence polygon (secondary visual reference)
 export const DAMIETTA_GEOFENCE = [
   [31.4620, 31.7680],
   [31.4580, 31.8480],

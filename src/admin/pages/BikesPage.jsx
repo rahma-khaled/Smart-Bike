@@ -2,6 +2,8 @@ import React, { useState, useContext, useEffect } from "react";
 import * as Icons from "../../assets/Icons.jsx";
 import { SearchContext } from "../components/AdminLayout.jsx";
 import ViewBikeModal from "../components/ViewBikeModal.jsx";
+import { doc, updateDoc, deleteDoc, setDoc, collection } from 'firebase/firestore';
+import { db } from '../../firebase.js';
 import { logAdminAction } from "../utils/logger.js";
 
 // ── Status Constants ──
@@ -225,49 +227,69 @@ export default function BikesPage({ bikes = [], docks = [], setBikes }) {
     return (d.id || "").toLowerCase().includes(search.toLowerCase());
   });
 
-  const toggleBikeLock = (id) => {
-    const b = bikes.find(x => x.id === id);
-    if (!b) return;
-    const newLocked = !b.locked;
-    const newBikes = bikes.map(x => x.id === id ? { 
-      ...x, 
-      locked: newLocked, 
-      status: newLocked ? 'available' : 'active' 
-    } : x);
-    setBikes(newBikes);
-    logAdminAction(newLocked ? "Lock Bike" : "Unlock Bike", `Bike ${id} ${newLocked ? 'locked' : 'unlocked'}`);
-    showToast(`Bike ${id} ${newLocked ? 'Locked' : 'Unlocked'} successfully`);
+  const toggleBikeLock = async (id) => {
+    try {
+      const b = bikes.find(x => x.id === id);
+      if (!b) return;
+      const newLocked = !b.locked;
+      const bikeRef = doc(db, "bikes", id);
+      
+      await updateDoc(bikeRef, { 
+        locked: newLocked, 
+        status: newLocked ? 'available' : 'active' 
+      });
+      
+      logAdminAction(newLocked ? "Lock Bike" : "Unlock Bike", `Bike ${id} ${newLocked ? 'locked' : 'unlocked'}`);
+      showToast(`Bike ${id} ${newLocked ? 'Locked' : 'Unlocked'} successfully`);
+    } catch (err) {
+      showToast("Failed to toggle lock", "error");
+    }
   };
 
   const handleDelete = (bike) => setDeletingBike(bike);
-  const confirmDelete = (id) => {
-    setBikes(bikes.filter(bike => bike.id !== id));
-    logAdminAction("Delete Bike", `Bike ${id} deleted permanently`);
-    showToast(`Bike ${id} deleted successfully`);
-    setDeletingBike(null);
+  const confirmDelete = async (id) => {
+    try {
+      await deleteDoc(doc(db, "bikes", id));
+      logAdminAction("Delete Bike", `Bike ${id} deleted permanently`);
+      showToast(`Bike ${id} deleted successfully`);
+      setDeletingBike(null);
+    } catch (err) {
+      showToast("Failed to delete bike", "error");
+    }
   };
 
-  const handleUpdateBike = (updated) => {
-    setBikes(bikes.map(x => x.id === editingBike.id ? updated : x));
-    setEditingBike(null);
-    logAdminAction("Update Bike", `Bike ${updated.id} parameters updated (Voltage: ${updated.voltage}V)`);
-    showToast(`Bike ${updated.id} updated successfully`);
+  const handleUpdateBike = async (updated) => {
+    try {
+      await updateDoc(doc(db, "bikes", editingBike.id), updated);
+      setEditingBike(null);
+      logAdminAction("Update Bike", `Bike ${updated.id} parameters updated`);
+      showToast(`Bike ${updated.id} updated successfully`);
+    } catch (err) {
+      showToast("Failed to update bike", "error");
+    }
   };
 
-  const handleAddBike = (newBike) => {
-    setBikes([newBike, ...bikes]);
-    setShowAddModal(false);
-    logAdminAction("Add Bike", `New Bike ${newBike.id} deployed to ${newBike.zone}`);
-    showToast(`Bike ${newBike.id} added successfully`);
+  const handleAddBike = async (newBike) => {
+    try {
+      await setDoc(doc(db, "bikes", newBike.id), newBike);
+      setShowAddModal(false);
+      logAdminAction("Add Bike", `New Bike ${newBike.id} deployed to ${newBike.zone}`);
+      showToast(`Bike ${newBike.id} added successfully`);
+    } catch (err) {
+      showToast("Failed to add bike", "error");
+    }
   };
 
   const setDocks = (nd) => setState(s => ({ ...s, docks: nd }));
 
-  const handleSendLCD = (id, text) => {
-    const newDocks = docks.map(d => d.id === id ? { ...d, lcdMessage: text } : d);
-    setDocks(newDocks);
-    logAdminAction("Remote LCD", `Message sent to ${id}: "${text}"`);
-    showToast(`Message sent to ${id} LCD`);
+  const handleSendLCD = async (id, text) => {
+    try {
+      await updateDoc(doc(db, "docks", id), { lcdMessage: text });
+      logAdminAction("Remote LCD", `Message sent to ${id}: "${text}"`);
+      showToast(`Message sent to ${id} LCD`);
+    } catch (err) {
+      showToast("Failed to send LCD message", "error");
+    }
   };
 
   return (

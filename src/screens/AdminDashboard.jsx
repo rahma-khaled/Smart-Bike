@@ -79,13 +79,13 @@ function AdminDashboard({ navigate, state, setState }) {
     // update master users list status
     try {
       let users = JSON.parse(localStorage.getItem('users') || '[]');
-      users = users.map(u => u.email === email ? { ...u, status: 'approved' } : u);
+      users = users.map(u => u.email === email ? { ...u, status: 'verified' } : u);
       localStorage.setItem('users', JSON.stringify(users));
 
       // If user is currently logged in, update their state
       const user = users.find(u => u.email === email);
       if (user) {
-        console.log('User approved:', user.phone, user.name);
+        console.log('User verified:', user.phone, user.name);
       }
       setTotalUsers(users.length);
     } catch { }
@@ -289,7 +289,7 @@ function AdminDashboard({ navigate, state, setState }) {
                         <td style={{ padding: 12 }}><div style={{ fontWeight: 600, fontSize: 13, color: DARK }}>{user.name || 'User'}</div></td>
                         <td style={{ padding: 12, fontSize: 12, color: "#666" }}>{user.email}</td>
                         <td style={{ padding: 12, textAlign: "center", fontSize: 12 }}><button onClick={() => setSelectedUser(user)} style={{ background: LIME, color: DARK, border: "none", borderRadius: 6, padding: "6px 12px", cursor: "pointer", fontWeight: 600, fontSize: 11 }}>View Photos</button></td>
-                        <td style={{ padding: 12, textAlign: "center" }}><button onClick={() => handleApproveUser(user.email)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', background: "#4CAF50", color: "white", border: "none", borderRadius: 6, padding: "6px 10px", cursor: "pointer", fontWeight: 600, fontSize: 11, marginRight: 6 }}><Icons.CheckCircleIcon size={12} style={{ marginRight: 4 }} />Approve</button><button onClick={() => handleRejectUser(user.email)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', background: "#f44336", color: "white", border: "none", borderRadius: 6, padding: "6px 10px", cursor: "pointer", fontWeight: 600, fontSize: 11 }}><Icons.XCircleIcon size={12} style={{ marginRight: 4 }} />Reject</button>
+                        <td style={{ padding: 12, textAlign: "center" }}><button onClick={() => handleApproveUser(user.email)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', background: "#4CAF50", color: "white", border: "none", borderRadius: 6, padding: "6px 10px", cursor: "pointer", fontWeight: 600, fontSize: 11, marginRight: 6 }}><Icons.CheckCircleIcon size={12} style={{ marginRight: 4 }} />Verify</button><button onClick={() => handleRejectUser(user.email)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', background: "#f44336", color: "white", border: "none", borderRadius: 6, padding: "6px 10px", cursor: "pointer", fontWeight: 600, fontSize: 11 }}><Icons.XCircleIcon size={12} style={{ marginRight: 4 }} />Reject</button>
 </td>
                       </tr>
                     ))}
@@ -437,7 +437,7 @@ function AdminDashboard({ navigate, state, setState }) {
               <button onClick={() => { handleSendNote(selectedUser.email, noteText); setNoteText(''); alert('Note sent'); }} style={{ background: LIME, color: DARK, border: "none", borderRadius: 6, padding: "8px 12px", cursor: "pointer", fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Icons.MessageSquareIcon size={14} style={{ marginRight: 6 }} />Send Note</button>
             </div>
             <div style={{ display: "flex", gap: 12 }}>
-              <button onClick={() => handleApproveUser(selectedUser.email)} style={{ flex: 1, background: "#4CAF50", color: "white", border: "none", borderRadius: 8, padding: 12, cursor: "pointer", fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Icons.CheckCircleIcon size={14} style={{ marginRight: 6 }} />Approve User</button>
+              <button onClick={() => handleApproveUser(selectedUser.email)} style={{ flex: 1, background: "#4CAF50", color: "white", border: "none", borderRadius: 8, padding: 12, cursor: "pointer", fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Icons.CheckCircleIcon size={14} style={{ marginRight: 6 }} />Verify User</button>
 <button onClick={() => handleRejectUser(selectedUser.email)} style={{ flex: 1, background: "#f44336", color: "white", border: "none", borderRadius: 8, padding: 12, cursor: "pointer", fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Icons.XCircleIcon size={14} style={{ marginRight: 6 }} />Reject User</button>
             </div>
           </div>

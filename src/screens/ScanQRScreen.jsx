@@ -23,14 +23,14 @@ export default
   const initialTargetId = selectedBike?.id || null;
 
   useEffect(() => {
-    if (state.user?.status && state.user.status !== 'verified' && state.user.status !== 'approved') {
+    if (state.user?.status && state.user.status !== 'verified') {
       navigate('statusDashboard');
     }
   }, [state.user?.status, navigate]);
 
   // Auto-trigger Sensor Gate immediately on mount if permission granted
   useEffect(() => {
-    if ((state.user?.status === 'verified' || state.user?.status === 'approved') && permissionStatus === 'granted') {
+    if (state.user?.status === 'verified' && permissionStatus === 'granted') {
       initiateSensorGate(false);
     }
   }, [permissionStatus]);

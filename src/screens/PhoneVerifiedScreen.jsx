@@ -11,7 +11,7 @@ function PhoneVerifiedScreen({ navigate, state, setState }) {
     const timer = setTimeout(() => {
       const userStatus = state.user?.status;
 
-      if (userStatus === 'approved') {
+      if (userStatus === 'verified') {
         // Approved user goes to home map
         navigate('map');
       } else if (userStatus === 'pending') {
@@ -34,7 +34,7 @@ function PhoneVerifiedScreen({ navigate, state, setState }) {
       <h2 style={{ fontSize: 26, fontWeight: 800, fontFamily: "'Space Grotesk',sans-serif", textAlign: "center" }}>Congratulation!</h2>
       <p style={{ color: "#888", textAlign: "center", marginTop: 10, lineHeight: 1.5 }}>Your Phone Number has been verified successfully.</p>
       <p style={{ color: "#999", textAlign: "center", marginTop: 16, fontSize: 12, lineHeight: 1.4 }}>
-        {state.user?.status === 'approved' && 'Redirecting to your map...'}
+        {state.user?.status === 'verified' && 'Redirecting to your map...'}
         {state.user?.status === 'pending' && 'Checking your status...'}
         {!state.user?.status && 'Completing registration...'}
       </p>

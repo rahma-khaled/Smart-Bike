@@ -1,7 +1,8 @@
 import React, { useContext, useEffect, useState } from "react";
-import { payments as initialPayments } from "../data/mockData.js";
 import { SearchContext } from "../components/AdminLayout.jsx";
 import { CreditCard } from "lucide-react";
+import { db } from "../../firebase.js";
+import { collection, onSnapshot, query, orderBy } from "firebase/firestore";
 
 const STATUS_STYLES = {
   success: "bg-emerald-500/10 text-emerald-400",
@@ -12,17 +13,14 @@ const METHOD_ICONS = { Wallet: "💳", Card: "🏦", Fawry: "🧾" };
 
 export default function PaymentsPage() {
   const { search } = useContext(SearchContext);
-  const [payments, setPayments] = useState(initialPayments);
+  const [payments, setPayments] = useState([]);
 
-  // ── BACKEND INTEGRATION PLACEHOLDER ──
   useEffect(() => {
-    async function fetchPayments() {
-      // console.log("[API] FETCH /api/admin/payments");
-      // const res = await fetch('/api/admin/payments');
-      // const data = await res.json();
-      // setPayments(data);
-    }
-    fetchPayments();
+    const q = query(collection(db, "payments"), orderBy("date", "desc"));
+    const unsubscribe = onSnapshot(q, (snap) => {
+      setPayments(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    });
+    return () => unsubscribe();
   }, []);
 
   const filtered = (payments || []).filter(p =>

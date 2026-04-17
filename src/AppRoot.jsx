@@ -4,6 +4,10 @@ import App from "./SmartBikeApp.jsx";
 import AdminApp from "./admin/AdminApp.jsx";
 import { DAMIETTA_BIKES } from './features/telemetry/geofence';
 import localforage from 'localforage';
+import { auth, db } from './firebase.js';
+import { onAuthStateChanged } from 'firebase/auth';
+import { doc, getDoc, onSnapshot, collection, setDoc, getDocs } from 'firebase/firestore';
+import { DAMIETTA_BIKES } from './features/telemetry/geofence';
 
 export default function AppRoot() {
   const location = useLocation();
@@ -12,120 +16,128 @@ export default function AppRoot() {
     selectedBike: null,
     otpMethod: "sms",
     user: { name: "", email: "", profilePic: "", role: "", phone: "", first: "", last: "", status: null, rideHistory: [], startDockName: null },
-    bikes: DAMIETTA_BIKES.map(b => {
-      // Find if this bike is docked anywhere in our static docks
-      const dock = [
-        { id: "DOCK-DU-01", lat: 31.4398, lng: 31.6705, occupiedBy: "B-LOCAL" },
-        { id: "DOCK-CP-02", lat: 31.4285, lng: 31.6750, occupiedBy: null },
-        { id: "DOCK-BA-03", lat: 31.4550, lng: 31.6620, occupiedBy: null }
-      ].find(d => d.occupiedBy === b.id);
-      
-      return { 
-        ...b, 
-        locked: b.status === 'Locked', 
-        voltage: 4.2,
-        lat: dock ? dock.lat : b.lat,
-        lng: dock ? dock.lng : b.lng
-      };
-    }),
-    docks: [
-      { id: "DOCK-DU-01", name: "Damietta University", lat: 31.4398, lng: 31.6705, occupiedBy: "B-LOCAL", servoPos: 170, voltage: 4.2, capacity: 10, lcdMessage: "Welcome!" },
-      { id: "DOCK-CP-02", name: "Central Park Hub", lat: 31.4285, lng: 31.6750, occupiedBy: null, servoPos: 170, voltage: 4.2, capacity: 10, lcdMessage: "Ready to ride" },
-      { id: "DOCK-BA-03", name: "New Damietta Beach", lat: 31.4550, lng: 31.6620, occupiedBy: null, servoPos: 170, voltage: 3.1, capacity: 10, lcdMessage: "Solar charging..." }
-    ],
+    bikes: [],
+    docks: [],
     users: [],
     isAdminMode: false
   });
+
+  const DEFAULT_DOCKS = [
+    { id: "DOCK-DU-01", name: "Damietta University", lat: 31.4398, lng: 31.6705, occupiedBy: "B-LOCAL", servoPos: 170, voltage: 4.2, capacity: 10, lcdMessage: "Welcome!" },
+    { id: "DOCK-CP-02", name: "Central Park Hub", lat: 31.4285, lng: 31.6750, occupiedBy: null, servoPos: 170, voltage: 4.2, capacity: 10, lcdMessage: "Ready to ride" },
+    { id: "DOCK-BA-03", name: "New Damietta Beach", lat: 31.4550, lng: 31.6620, occupiedBy: null, servoPos: 170, voltage: 3.1, capacity: 10, lcdMessage: "Solar charging..." }
+  ];
 
   const [screen, setScreen] = useState('splash');
 
   // BOOTING & INITIALIZATION: Run exactly once on mount
   useEffect(() => {
-    async function boot() {
-      console.log("=== APPROOT BOOTING STARTING ===");
-      
-      // 1. Re-hydrate User State
-      const savedUserJSON = localStorage.getItem('bike_app_user');
-      const isAdminMode = localStorage.getItem('admin_mode') === 'true';
-      const appUsers = await localforage.getItem('app_users') || [];
-
-      let user = { name: "", email: "", profilePic: "", role: "", phone: "", first: "", last: "", status: null };
-      if (savedUserJSON) {
-        user = JSON.parse(savedUserJSON);
-        // Re-sync with latest status from database immediately
-        const liveUser = appUsers.find(u => u.phone === user.phone);
-        if (liveUser) user = { ...user, ...liveUser };
-      }
-
-      // 2. Determine Initial Screen
-      const path = window.location.pathname;
-      const isAdminPath = path.startsWith('/admin');
-      let initialScreen = 'login';
-
-      if (user && user.phone) {
-        const status = (user.status || "").toUpperCase();
-        if (isAdminMode || isAdminPath) initialScreen = 'adminDashboard';
-        else if (status === 'APPROVED' || status === 'VERIFIED') {
-           initialScreen = user.phoneVerified ? 'map' : 'otp';
+    async function seedInitialData() {
+      try {
+        const bikesSnap = await getDocs(collection(db, "bikes"));
+        if (bikesSnap.empty) {
+          console.log("Seeding initial bikes to Firestore...");
+          for (const b of DAMIETTA_BIKES) {
+            await setDoc(doc(db, "bikes", b.id), { ...b, locked: b.status === 'Locked', voltage: 4.2 });
+          }
         }
-        else if (status === 'PENDING') initialScreen = 'pendingApproval';
-        else if (status === 'NEED_CORRECTION' || status === 'NEEDS_CORRECTION') initialScreen = 'needCorrection';
-        else if (status === 'REJECTED') initialScreen = 'login';
-        else initialScreen = 'scanId'; // Force ID upload for new/unverified users
-      } else {
-        if (path === '/') initialScreen = 'splash';
-        else initialScreen = 'login';
+        
+        const docksSnap = await getDocs(collection(db, "docks"));
+        if (docksSnap.empty) {
+          console.log("Seeding initial docks to Firestore...");
+          for (const d of DEFAULT_DOCKS) {
+            await setDoc(doc(db, "docks", d.id), d);
+          }
+        }
+      } catch (err) {
+        console.error("Seeding failed:", err);
       }
+    }
 
-      // 3. Commit to state
-      setState(s => ({ 
-        ...s, 
-        user, 
-        users: appUsers, 
-        isAdminMode: isAdminMode || isAdminPath 
-      }));
-      setScreen(initialScreen);
-      setBooting(false);
+    async function boot() {
+      console.log("=== APPROOT BOOTING STARTING (FIREBASE) ===");
+      await seedInitialData();
       
-      console.log("=== APPROOT BOOTING COMPLETE. Initial Screen:", initialScreen, " ===");
+      onAuthStateChanged(auth, async (fbUser) => {
+        if (fbUser) {
+          console.log("Firebase Auth detected user:", fbUser.uid);
+          const userDoc = await getDoc(doc(db, "users", fbUser.uid));
+          let userData = userDoc.exists() ? userDoc.data() : { uid: fbUser.uid, email: fbUser.email, status: 'pending' };
+
+          const path = window.location.pathname;
+          const isAdminPath = path.startsWith('/admin');
+          const isAdminMode = localStorage.getItem('admin_mode') === 'true';
+          let initialScreen = 'map';
+
+          const status = (userData.status || "").toUpperCase();
+          if (isAdminMode || isAdminPath) initialScreen = 'adminDashboard';
+          else if (status === 'VERIFIED') initialScreen = userData.phoneVerified ? 'map' : 'otp';
+          else if (status === 'PENDING') initialScreen = 'pendingApproval';
+          else if (status === 'NEED_CORRECTION' || status === 'NEEDS_CORRECTION') initialScreen = 'needCorrection';
+          else if (status === 'REJECTED') initialScreen = 'login';
+          else initialScreen = 'scanId';
+
+          setState(s => ({ ...s, user: userData, isAdminMode: isAdminMode || isAdminPath }));
+          setScreen(initialScreen);
+          setBooting(false);
+        } else {
+          console.log("No Firebase user found - showing splash/login");
+          setScreen(window.location.pathname === '/' ? 'splash' : 'login');
+          setBooting(false);
+        }
+      });
     }
     boot();
   }, []);
 
-  // "Check Status" Effect: ONLY trigger on status change, never on screen change
+  // Sync Bikes & Docks from Firestore
   useEffect(() => {
-    if (booting || state.isAdminMode || !state.user?.phone) return;
+    const unsubBikes = onSnapshot(collection(db, "bikes"), (snap) => {
+      const bikesArr = snap.docs.map(d => d.data());
+      setState(s => ({ ...s, bikes: bikesArr }));
+    });
+    const unsubDocks = onSnapshot(collection(db, "docks"), (snap) => {
+      const docksArr = snap.docs.map(d => d.data());
+      setState(s => ({ ...s, docks: docksArr }));
+    });
+    
+    // Also sync all users if in admin mode
+    let unsubUsers = () => {};
+    if (state.isAdminMode) {
+      unsubUsers = onSnapshot(collection(db, "users"), (snap) => {
+        const usersArr = snap.docs.map(d => d.data());
+        setState(s => ({ ...s, users: usersArr }));
+      });
+    }
 
-    let lastStatus = state.user.status;
+    return () => { unsubBikes(); unsubDocks(); unsubUsers(); };
+  }, [state.isAdminMode]);
 
-    const interval = setInterval(async () => {
-      try {
-        const appUsers = await localforage.getItem('app_users') || [];
-        const liveUser = appUsers.find(u => u.phone === state.user.phone);
-        
-        if (liveUser && liveUser.status !== lastStatus) {
-          console.log("STATUS CHANGE DETECTED:", lastStatus, "->", liveUser.status);
-          lastStatus = liveUser.status;
+  // Real-time Status Sync via Firestore onSnapshot
+  useEffect(() => {
+    if (booting || state.isAdminMode || !state.user?.uid) return;
 
+    console.log("Setting up real-time status sync for UID:", state.user.uid);
+    const unsubscribe = onSnapshot(doc(db, "users", state.user.uid), (docSnap) => {
+      if (docSnap.exists()) {
+        const liveUser = docSnap.data();
+        if (liveUser.status !== state.user.status) {
+          console.log("STATUS CHANGE DETECTED (Firestore):", state.user.status, "->", liveUser.status);
           const updatedUser = { ...state.user, ...liveUser };
           setState(s => ({ ...s, user: updatedUser }));
           localStorage.setItem('bike_app_user', JSON.stringify(updatedUser));
           
-          // Only force-redirect if they just got verified AND are not in Admin mode
-          const isVerified = (liveUser.status || "").toLowerCase() === 'verified' || (liveUser.status || "").toLowerCase() === 'approved';
-          const currentlyAdmin = window.location.pathname.startsWith('/admin') || state.isAdminMode;
-          
-          if (isVerified && !currentlyAdmin) {
+          if (liveUser.status === 'verified' && !state.isAdminMode) {
             setScreen('map');
-          } else if (liveUser.status === 'needs_correction' && !currentlyAdmin) {
-            setScreen('statusDashboard');
+          } else if (liveUser.status === 'needs_correction' && !state.isAdminMode) {
+             setScreen('statusDashboard');
           }
         }
-      } catch (e) {}
-    }, 5010); // Slower interval for stability
+      }
+    });
 
-    return () => clearInterval(interval);
-  }, [state.user?.phone, booting]);
+    return () => unsubscribe();
+  }, [state.user?.uid, booting, state.isAdminMode]);
 
   // Persist user state to localStorage
   useEffect(() => {

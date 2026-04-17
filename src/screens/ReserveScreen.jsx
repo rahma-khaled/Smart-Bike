@@ -7,7 +7,7 @@ import BackBtn from '../components/common/BackBtn';
 export default 
 function ReserveScreen({ navigate, state, setState }) {
   useEffect(() => {
-    if (state.user?.status && state.user.status !== 'verified' && state.user.status !== 'approved') {
+    if (state.user?.status && state.user.status !== 'verified') {
       navigate('statusDashboard');
     }
   }, [state.user?.status, navigate]);

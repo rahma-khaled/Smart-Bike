@@ -62,7 +62,7 @@ function AdminScreen({ navigate, state, setState }) {
             <strong>How it works:</strong><br />
             1. Enter a pending user's email<br />
             2. Click "Approve User" to update their status<br />
-            3. Their status changes to 'approved' in localStorage<br />
+            3. Their status changes to 'verified' in localStorage<br />
             4. They'll have full app access on next login
           </div>
         </div>

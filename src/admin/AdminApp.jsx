@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
-import localforage from "localforage";
+import { Routes, Route, Navigate } from "react-router-dom";
 import * as Icons from "../assets/Icons.jsx";
 import AdminLayout from "./components/AdminLayout.jsx";
 import DashboardPage from "./pages/DashboardPage.jsx";
@@ -33,69 +33,22 @@ export default function AdminApp({ navigate, state, setState }) {
     async function checkIoT() {
       if (!state.bikes) return;
       try {
-        const logs = await localforage.getItem("admin_logs") || [];
         const alerts = state.user?.alerts || [];
         let updatedLogs = false;
 
-        state.bikes.forEach(bike => {
+        for (const bike of state.bikes) {
           // --- 1. Voltage Monitoring ---
           const v = bike.voltage || 4.2;
           if (v < 3.2) {
-            // Log only once per bike per day
             const alertId = `iot-low-${bike.id}-${new Date().toDateString()}`;
-            if (!logs.find(l => l.alertId === alertId)) {
-              const entry = {
-                id: alertId,
-                timestamp: new Date().toISOString(),
-                operator: "System_AI",
-                action: "Maintenance Alert",
-                details: `Bike ID: ${bike.id} - Critical Battery Voltage (${v.toFixed(1)}V). Charging Required.`,
-                alertId,
-                isSystem: true
-              };
-              logs.unshift(entry);
-              alerts.unshift({
-                id: alertId,
-                title: "Maintenance Alert",
-                body: entry.details,
-                date: entry.timestamp,
-                read: false,
-                isSystem: true
-              });
-              updatedLogs = true;
-            }
+            // We'll rely on our logger to handle persistence
+            await logAdminAction("Maintenance Alert", `Bike ID: ${bike.id} - Critical Battery Voltage (${v.toFixed(1)}V). Charging Required.`);
           }
 
           // --- 2. Security (Vibration/GPS) Alert Monitoring ---
           if (bike.locked && bike.theftAlert) {
-            const theftId = `theft-${bike.id}-${new Date().getHours()}`;
-            if (!logs.find(l => l.alertId === theftId)) {
-              const evt = {
-                id: theftId,
-                timestamp: new Date().toISOString(),
-                operator: "SIM800L_GATEWAY",
-                action: "CRITICAL THEFT ALERT",
-                details: `Bike ${bike.id} locked but MPU6050 vibration or unauthorized GPS movement detected!`,
-                alertId: theftId,
-                isSystem: true
-              };
-              logs.unshift(evt);
-              alerts.unshift({
-                id: theftId,
-                title: "CRITICAL: Theft Detected",
-                body: evt.details,
-                date: evt.timestamp,
-                read: false,
-                isSystem: true
-              });
-              updatedLogs = true;
-            }
+            await logAdminAction("CRITICAL THEFT ALERT", `Bike ${bike.id} locked but MPU6050 vibration or unauthorized GPS movement detected!`);
           }
-        });
-
-        if (updatedLogs) {
-          await localforage.setItem("admin_logs", logs);
-          setState(s => ({ ...s, user: { ...s.user, alerts } }));
         }
       } catch (err) {
         console.error("IoT Check Failed", err);

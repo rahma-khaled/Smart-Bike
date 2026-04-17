@@ -25,11 +25,6 @@ export default function Sidebar({ navigate: setScreen, setState }) {
     window.location.href = '/';
   };
 
-  const handleExit = () => {
-    // Return to the mobile map view without clearing session
-    if (setScreen) setScreen('map');
-    navigate('/');
-  };
 
   const handleLogout = () => {
     localStorage.removeItem('bike_app_user');
@@ -84,12 +79,6 @@ export default function Sidebar({ navigate: setScreen, setState }) {
 
       {/* Navigation Footer */}
       <div className="px-3 pb-6 space-y-1">
-        <button
-          onClick={handleExit}
-          className="flex items-center gap-3 px-4 py-3 w-full rounded-xl text-sm font-medium text-gray-400 hover:text-white hover:bg-white/5 transition-all"
-        >
-          <LogOut size={18} /> Exit to App
-        </button>
         <button
           onClick={handleLogout}
           className="flex items-center gap-3 px-4 py-3 w-full rounded-xl text-sm font-medium text-red-400 hover:bg-red-500/10 transition-all"

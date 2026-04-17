@@ -1,6 +1,7 @@
-import React, { useEffect, useRef, useContext } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Users, Bike, Activity, DollarSign, AlertTriangle, Clock } from "lucide-react";
-import { stats, bikes, trips, alerts } from "../data/mockData.js";
+import { db } from "../../firebase.js";
+import { collection, onSnapshot, query, orderBy } from "firebase/firestore";
 
 const STATUS_COLOR = {
   available:   "bg-[#CCFF00]",
@@ -82,21 +83,21 @@ function LiveMap({ bikes = [] }) {
   );
 }
 
-export default function DashboardPage({ state, setState }) {
-  const bikes = state.bikes || [];
-  const users = state.users || [];
-  const liveTrips = (state.trips || []).filter(t => t.status === 'active');
+export default function DashboardPage() {
+  const [bikes, setBikes] = useState([]);
+  const [users, setUsers] = useState([]);
+  const [trips, setTrips] = useState([]);
+  const [alerts, setAlerts] = useState([]);
 
-  // ── BACKEND INTEGRATION PLACEHOLDER ──
   useEffect(() => {
-    async function fetchData() {
-      // console.log("[API] FETCH /api/admin/dashboard-stats");
-      // const res = await fetch('/api/admin/dashboard-stats');
-      // const data = await res.json();
-      // Update state with fetched data...
-    }
-    fetchData();
+    const unsubBikes = onSnapshot(collection(db, "bikes"), (snap) => setBikes(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+    const unsubUsers = onSnapshot(collection(db, "users"), (snap) => setUsers(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+    const unsubTrips = onSnapshot(query(collection(db, "trips"), orderBy("start", "desc")), (snap) => setTrips(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+    const unsubAlerts = onSnapshot(collection(db, "alerts"), (snap) => setAlerts(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+    return () => { unsubBikes(); unsubUsers(); unsubTrips(); unsubAlerts(); };
   }, []);
+
+  const liveTrips = trips.filter(t => t.status === 'active');
 
   return (
     <div className="space-y-6">
@@ -110,7 +111,7 @@ export default function DashboardPage({ state, setState }) {
         <StatCard label="Total Users"    value={users.length}    Icon={Users}    accent="bg-[#CCFF00]" />
         <StatCard label="Total Bikes"    value={bikes.length}    Icon={Bike}     accent="bg-cyan-400" />
         <StatCard label="Active Rides"   value={bikes.filter(b => b.status === 'active').length}   Icon={Activity} accent="bg-[#CCFF00]/40" />
-        <StatCard label="Today's Revenue" value={`${(stats.todayRevenue || 0).toLocaleString()} EGP`} Icon={DollarSign} accent="bg-orange-400" />
+        <StatCard label="Today's Revenue" value={`${(0).toLocaleString()} EGP`} Icon={DollarSign} accent="bg-orange-400" />
       </div>
 
       {/* Map */}

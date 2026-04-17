@@ -20,7 +20,7 @@ function StatusDashboardScreen({ navigate, state, setState }) {
           console.log("Status update detected in Dashboard:", state.user.status, "->", latestUser.status);
           
           // If status upgraded to Verified, log them in!
-          if (latestUser.status === 'verified' || latestUser.status === 'approved') {
+          if (latestUser.status === 'verified') {
             setState(s => ({ ...s, user: { ...s.user, ...latestUser, status: 'verified' } })); 
             navigate('map');
           } else {
@@ -63,7 +63,7 @@ function StatusDashboardScreen({ navigate, state, setState }) {
             Welcome back!
           </div>
           <p style={{ color: "#555", fontSize: 12, marginTop: 4, lineHeight: 1.5 }}>
-            Your account is still being reviewed by our team. We'll notify you as soon as it's approved.
+            Your account is still being reviewed by our team. We'll notify you as soon as it's verified.
           </p>
         </div>
       )}
@@ -143,7 +143,7 @@ function StatusDashboardScreen({ navigate, state, setState }) {
         <Icons.ClockIcon size={20} color="#2e7d32" style={{ flexShrink: 0, marginTop: 2 }} />
         <div style={{ fontSize: 12, color: "#666", lineHeight: 1.6 }}>
           <strong>Expected wait time:</strong> Usually 24 hours<br />
-          We'll notify you via email once your account is approved.
+          We'll notify you via email once your account is verified.
         </div>
       </div>
 

@@ -78,7 +78,7 @@ function App({ state, setState, screen, setScreen }) {
   let secureScreen = screen;
   if (!isAdmin && state.user?.phone) {
     const status = (state.user.status || "").toLowerCase();
-    const isVerified = status === 'verified' || status === 'approved';
+    const isVerified = status === 'verified';
     const isSafeScreen = ['welcome', 'login', 'register', 'otp', 'otpMethod', 'phoneVerified', 'scanId', 'scanComplete', 'onboard1', 'onboard2', 'onboard3', 'statusDashboard', 'needCorrection'].includes(screen);
     
     if (!isVerified && !isSafeScreen) {

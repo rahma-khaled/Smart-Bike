@@ -1,7 +1,8 @@
 import React, { useState, useContext, useEffect } from "react";
 import { SearchContext } from "../components/AdminLayout.jsx";
 import * as Icons from "../../assets/Icons.jsx";
-import localforage from 'localforage';
+import { doc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { db } from '../../firebase.js';
 import { logAdminAction } from '../utils/logger.js';
 
 // ── Status Config ──
@@ -162,7 +163,7 @@ function ViewUserDetailModal({ user, onClose, onAccept, onReject, onRequestEdit 
               onClick={() => { onAccept(user); onClose(); }}
               className="flex-1 py-3.5 rounded-xl bg-[#CCFF00] text-[#111] font-bold hover:brightness-110 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
             >
-              <Icons.CheckCircleIcon size={18} color="#111" /> Approve User
+              <Icons.CheckCircleIcon size={18} color="#111" /> Verify User
             </button>
           )}
           {user.status !== "verified" && (
@@ -249,22 +250,9 @@ export default function UsersPage({ state, setState }) {
 
   const showToast = (message, type = 'success') => setToast({ message, type });
 
-  // Periodically fetch new users to avoid staleness and missing new registrations
-  useEffect(() => {
-    const fetchUsers = async () => {
-      try {
-        const fresh = await localforage.getItem('app_users') || [];
-        if (Array.isArray(fresh)) {
-          // Deep compare could be used, but simple stringify check is robust enough for small arrays
-          setUsers(prev => JSON.stringify(prev) !== JSON.stringify(fresh) ? fresh : prev);
-        }
-      } catch (e) { }
-    };
-
-    fetchUsers(); // run on mount immediately
-    const interval = setInterval(fetchUsers, 3000);
-    return () => clearInterval(interval);
-  }, []);
+  // Data is now provided via props 'state.users' from AppRoot's real-time listener.
+  // We no longer need the local fetchUsers effect.
+  const users = state.users || [];
 
   // Pillar 4: Handle Bell Filter from Header
   useEffect(() => {
@@ -300,22 +288,37 @@ export default function UsersPage({ state, setState }) {
   function handleAccept(user) {
     setConfirmAction({
       title: "Accept User",
-      message: <>Approve <span className="text-white font-bold">{user.name || `${user.first} ${user.last}`}</span>? They will be marked as Verified.</>,
+      message: <>Verify <span className="text-white font-bold">{user.name || `${user.first} ${user.last}`}</span>? They will be marked as Verified.</>,
       confirmLabel: "Accept",
       confirmColor: "green",
       icon: <Icons.CheckCircleIcon size={24} color="#4CAF50" />,
       onConfirm: async () => {
-        const currentUsers = await localforage.getItem('app_users') || [];
-        const updated = currentUsers.map(u => u.phone === user.phone ? {
-          ...u,
-          status: "verified",
-          verifiedAt: new Date().toISOString(),
-          alerts: [{ id: Date.now(), title: "Account Verified!", message: "Congratulations! You have been approved by Admin and can now rent bikes.", type: "success", date: new Date().toISOString(), read: false }, ...(u.alerts || [])]
-        } : u);
-        setUsers(updated);
-        await localforage.setItem('app_users', updated);
+        try {
+          const userRef = doc(db, "users", user.uid);
+          const updates = {
+            status: "verified",
+            verifiedAt: new Date().toISOString(),
+            alerts: [{ 
+              id: Date.now(), 
+              title: "Account Verified!", 
+              message: "Congratulations! You have been approved by Admin and can now rent bikes.", 
+              type: "success", 
+              date: new Date().toISOString(), 
+              read: false 
+            }, ...(user.alerts || [])]
+          };
+          
+          await updateDoc(userRef, updates);
+          
+          await logAdminAction("Verify User", `Verified ${user.name || user.first} (${user.phone || user.email})`);
+          showToast("User Verified! They can now access the full application.");
+        } catch (err) {
+          console.error("Verification failed:", err);
+          showToast("Failed to verify user", "error");
+        }
+      }
 
-        // Also update the global state if the approved user is the one currently logged in/simulated
+        // Also update the global state if the verified user is the one currently logged in/simulated
         if (setState) {
           setState(prev => {
             if (prev.user && (prev.user.phone === user.phone || prev.user.email === user.email)) {
@@ -327,8 +330,8 @@ export default function UsersPage({ state, setState }) {
           });
         }
 
-        await logAdminAction("Approve User", `Approved ${user.name || user.first} (${user.phone || user.email})`);
-        showToast("User Approved! They can now access the full application.");
+        await logAdminAction("Verify User", `Verified ${user.name || user.first} (${user.phone || user.email})`);
+        showToast("User Verified! They can now access the full application.");
       }
     });
   }
@@ -341,16 +344,25 @@ export default function UsersPage({ state, setState }) {
       confirmColor: "red",
       icon: <Icons.XCircleIcon size={24} color="#F44336" />,
       onConfirm: async () => {
-        const currentUsers = await localforage.getItem('app_users') || [];
-        const updated = currentUsers.map(u => u.phone === user.phone ? {
-          ...u,
-          status: "rejected",
-          alerts: [{ id: Date.now(), title: "Application Rejected", message: "Your verification request was rejected. Please contact support.", type: "error", date: new Date().toISOString(), read: false }, ...(u.alerts || [])]
-        } : u);
-        setUsers(updated);
-        await localforage.setItem('app_users', updated);
-        await logAdminAction("Reject User", `Rejected ${user.name || user.first} (${user.phone || user.email})`);
-        showToast(`${user.name || user.first}'s request rejected`, 'error');
+        try {
+          const userRef = doc(db, "users", user.uid);
+          await updateDoc(userRef, {
+            status: "rejected",
+            alerts: [{ 
+              id: Date.now(), 
+              title: "Application Rejected", 
+              message: "Your verification request was rejected. Please contact support.", 
+              type: "error", 
+              date: new Date().toISOString(), 
+              read: false 
+            }, ...(user.alerts || [])]
+          });
+          
+          await logAdminAction("Reject User", `Rejected ${user.name || user.first} (${user.phone || user.email})`);
+          showToast(`${user.name || user.first}'s request rejected`, 'error');
+        } catch (err) {
+          showToast("Failed to reject user", "error");
+        }
       }
     });
   }
@@ -391,31 +403,33 @@ export default function UsersPage({ state, setState }) {
                 <button onClick={() => setRequestEditUser(null)} className="flex-1 py-3 rounded-xl border border-white/10 text-gray-400 text-sm font-bold hover:text-white bg-transparent transition-colors">Cancel</button>
                 <button
                   onClick={async () => {
-                    const logEntry = {
-                      date: new Date(),
-                      message: editReason || "Photo correction requested",
-                      status: "Needs Correction"
-                    };
-                    const currentUsers = await localforage.getItem('app_users') || [];
-                    const updated = currentUsers.map(u => {
-                      if (u.id === requestEditUser.id) {
-                        return {
-                          ...u,
-                          status: "needs_correction",
-                          correctionReason: editReason,
-                          alerts: [{ id: Date.now(), title: "Correction Needed", message: `Your photos need retaking. Admin Note: ${editReason}`, type: "warning", date: new Date().toISOString(), read: false }, ...(u.alerts || [])],
-                          updatedFields: {},
-                          correctionHistory: [...(u.correctionHistory || []), logEntry]
-                        };
-                      }
-                      return u;
-                    });
-                    setUsers(updated);
-                    await localforage.setItem('app_users', updated);
-                    await logAdminAction("Request Correction", `Requested ID/Photo correction for ${requestEditUser.name || requestEditUser.first}. Reason: ${editReason || "None generated."}`);
-                    showToast(`Correction request sent to ${requestEditUser.name || requestEditUser.first}`);
-                    setRequestEditUser(null);
-                    setViewingUserDetail(null);
+                    try {
+                      const logEntry = {
+                        date: new Date().toISOString(),
+                        message: editReason || "Photo correction requested",
+                        status: "needs_correction"
+                      };
+                      
+                      const userRef = doc(db, "users", requestEditUser.uid);
+                      await updateDoc(userRef, {
+                        status: "needs_correction",
+                        correctionHistory: [logEntry, ...(requestEditUser.correctionHistory || [])],
+                        alerts: [{
+                          id: Date.now(),
+                          title: "Correction Required",
+                          message: editReason || "Admin requested corrections to your documents.",
+                          type: "warning",
+                          date: new Date().toISOString(),
+                          read: false
+                        }, ...(requestEditUser.alerts || [])]
+                      });
+
+                      await logAdminAction("Request Correction", `Requested fix from ${requestEditUser.name || requestEditUser.first} for: ${editReason || 'No reason specified'}`);
+                      showToast("Correction request sent.");
+                      setRequestEditUser(null);
+                    } catch (err) {
+                      showToast("Failed to send request", "error");
+                    }
                   }}
                   className="flex-1 py-3 rounded-xl bg-yellow-500 hover:bg-yellow-600 text-[#111] text-sm font-bold transition-colors"
                 >

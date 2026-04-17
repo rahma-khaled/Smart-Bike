@@ -1,21 +1,21 @@
 import React, { useState, useEffect } from "react";
-import localforage from "localforage";
 import { Clock, User, Activity, AlertTriangle } from "lucide-react";
+import { db } from "../../firebase.js";
+import { collection, query, orderBy, onSnapshot, limit } from "firebase/firestore";
 
 export default function LogsPage() {
   const [logs, setLogs] = useState([]);
 
   useEffect(() => {
-    // Poll for fresh logs when component mounts
-    localforage.getItem("admin_logs").then(data => {
-      setLogs(data || []);
+    const q = query(collection(db, "admin_logs"), orderBy("timestamp", "desc"), limit(100));
+    const unsubscribe = onSnapshot(q, (snap) => {
+      const logsArr = snap.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      setLogs(logsArr);
     });
-    
-    // Auto-refresh interval (for IoT system checks)
-    const t = setInterval(() => {
-      localforage.getItem("admin_logs").then(data => setLogs(data || []));
-    }, 5000);
-    return () => clearInterval(t);
+    return () => unsubscribe();
   }, []);
 
   return (
@@ -52,7 +52,7 @@ export default function LogsPage() {
                     <td className="p-4 text-gray-300">
                       <div className="flex items-center gap-2">
                         <Clock size={14} className="opacity-50" />
-                        {new Date(log.timestamp).toLocaleString()}
+                        {log.timestamp?.toDate ? log.timestamp.toDate().toLocaleString() : new Date(log.timestamp).toLocaleString()}
                       </div>
                     </td>
                     <td className="p-4">

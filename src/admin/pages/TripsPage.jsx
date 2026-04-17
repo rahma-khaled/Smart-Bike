@@ -1,7 +1,8 @@
 import React, { useContext, useEffect, useState } from "react";
-import { trips as initialTrips } from "../data/mockData.js";
 import { SearchContext } from "../components/AdminLayout.jsx";
 import { MapPin } from "lucide-react";
+import { db } from "../../firebase.js";
+import { collection, onSnapshot, query, orderBy } from "firebase/firestore";
 
 const STATUS_STYLES = {
   completed: "bg-emerald-500/10 text-emerald-400",
@@ -10,17 +11,14 @@ const STATUS_STYLES = {
 
 export default function TripsPage() {
   const { search } = useContext(SearchContext);
-  const [trips, setTrips] = useState(initialTrips);
+  const [trips, setTrips] = useState([]);
 
-  // ── BACKEND INTEGRATION PLACEHOLDER ──
   useEffect(() => {
-    async function fetchTrips() {
-      // console.log("[API] FETCH /api/admin/trips");
-      // const res = await fetch('/api/admin/trips');
-      // const data = await res.json();
-      // setTrips(data);
-    }
-    fetchTrips();
+    const q = query(collection(db, "trips"), orderBy("start", "desc"));
+    const unsubscribe = onSnapshot(q, (snap) => {
+      setTrips(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    });
+    return () => unsubscribe();
   }, []);
 
   const filtered = (trips || []).filter(t =>

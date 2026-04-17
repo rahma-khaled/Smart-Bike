@@ -55,7 +55,7 @@ export default function RidingScreen({ navigate, state, setState }) {
 
   // ── Access guard ──
   useEffect(() => {
-    if (state.user?.status && state.user.status !== 'verified' && state.user.status !== 'approved') {
+    if (state.user?.status && state.user.status !== 'verified') {
       navigate('statusDashboard');
     }
   }, [state.user?.status, navigate]);

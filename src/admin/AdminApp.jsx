@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
-import { Routes, Route, Navigate } from "react-router-dom";
 import * as Icons from "../assets/Icons.jsx";
 import AdminLayout from "./components/AdminLayout.jsx";
 import DashboardPage from "./pages/DashboardPage.jsx";

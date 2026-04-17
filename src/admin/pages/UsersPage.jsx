@@ -240,7 +240,6 @@ function ConfirmActionModal({ title, message, confirmLabel, confirmColor, onClos
 
 export default function UsersPage({ state, setState }) {
   const { search } = useContext(SearchContext);
-  const [users, setUsers] = useState([]);
   const [activeTab, setActiveTab] = useState("All");
   const [viewingUserDetail, setViewingUserDetail] = useState(null);
   const [confirmAction, setConfirmAction] = useState(null);
@@ -271,17 +270,18 @@ export default function UsersPage({ state, setState }) {
       (u.email || "").toLowerCase().includes(search.toLowerCase()) ||
       (u.first || "").toLowerCase().includes(search.toLowerCase()) ||
       (u.last || "").toLowerCase().includes(search.toLowerCase());
-    const matchTab = activeTab === "All" || u.status === activeTab;
+    const userStatus = (u.status || "").toLowerCase();
+    const matchTab = activeTab === "All" || userStatus === activeTab.toLowerCase();
     return matchSearch && matchTab;
   });
 
   // Tab counts
   const counts = {
     All: safeUsers.length,
-    pending: safeUsers.filter(u => u.status === "pending").length,
-    verified: safeUsers.filter(u => u.status === "verified").length,
-    needs_correction: safeUsers.filter(u => u.status === "needs_correction").length,
-    rejected: safeUsers.filter(u => u.status === "rejected").length,
+    pending: safeUsers.filter(u => (u.status || "").toLowerCase() === "pending").length,
+    verified: safeUsers.filter(u => (u.status || "").toLowerCase() === "verified").length,
+    needs_correction: safeUsers.filter(u => (u.status || "").toLowerCase() === "needs_correction").length,
+    rejected: safeUsers.filter(u => (u.status || "").toLowerCase() === "rejected").length,
   };
 
   // ── Actions ──
@@ -310,28 +310,23 @@ export default function UsersPage({ state, setState }) {
           
           await updateDoc(userRef, updates);
           
+          if (setState) {
+            setState(prev => {
+              if (prev.user && (prev.user.phone === user.phone || prev.user.email === user.email)) {
+                const updatedUser = { ...prev.user, ...user, status: 'verified' };
+                localStorage.setItem('bike_app_user', JSON.stringify(updatedUser));
+                return { ...prev, user: updatedUser };
+              }
+              return prev;
+            });
+          }
+
           await logAdminAction("Verify User", `Verified ${user.name || user.first} (${user.phone || user.email})`);
           showToast("User Verified! They can now access the full application.");
         } catch (err) {
           console.error("Verification failed:", err);
           showToast("Failed to verify user", "error");
         }
-      }
-
-        // Also update the global state if the verified user is the one currently logged in/simulated
-        if (setState) {
-          setState(prev => {
-            if (prev.user && (prev.user.phone === user.phone || prev.user.email === user.email)) {
-              const updatedUser = { ...prev.user, ...user, status: 'verified' };
-              localStorage.setItem('bike_app_user', JSON.stringify(updatedUser));
-              return { ...prev, user: updatedUser };
-            }
-            return prev;
-          });
-        }
-
-        await logAdminAction("Verify User", `Verified ${user.name || user.first} (${user.phone || user.email})`);
-        showToast("User Verified! They can now access the full application.");
       }
     });
   }

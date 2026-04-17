@@ -6,8 +6,7 @@ import { DAMIETTA_BIKES } from './features/telemetry/geofence';
 import localforage from 'localforage';
 import { auth, db } from './firebase.js';
 import { onAuthStateChanged } from 'firebase/auth';
-import { doc, getDoc, onSnapshot, collection, setDoc, getDocs } from 'firebase/firestore';
-import { DAMIETTA_BIKES } from './features/telemetry/geofence';
+import { doc, getDoc, onSnapshot, collection, setDoc, getDocs, query, where, limit } from 'firebase/firestore';
 
 export default function AppRoot() {
   const location = useLocation();
@@ -61,9 +60,40 @@ export default function AppRoot() {
       onAuthStateChanged(auth, async (fbUser) => {
         if (fbUser) {
           console.log("Firebase Auth detected user:", fbUser.uid);
-          const userDoc = await getDoc(doc(db, "users", fbUser.uid));
-          let userData = userDoc.exists() ? userDoc.data() : { uid: fbUser.uid, email: fbUser.email, status: 'pending' };
+          
+          // 1. Fetch Profile from Firestore by UID
+          let userDoc = await getDoc(doc(db, "users", fbUser.uid));
+          let userData = null;
 
+          if (userDoc.exists()) {
+            userData = userDoc.data();
+            console.log("Found user profile by UID:", userData);
+          } else {
+            console.warn("User document not found by UID. Checking for legacy record (email/phone)...");
+            // FALLBACK: Search by email if UID doc doesn't exist (Legacy users indexed by phone)
+            try {
+              const q = query(collection(db, "users"), where("email", "==", fbUser.email), limit(1));
+              const snap = await getDocs(q);
+              if (!snap.empty) {
+                const legacyDoc = snap.docs[0];
+                userData = { ...legacyDoc.data(), uid: fbUser.uid };
+                console.log("MIGRATION: Found legacy record by email. Re-indexing...", userData);
+                
+                // Perform Migration: Save under UID to avoid future queries
+                await setDoc(doc(db, "users", fbUser.uid), userData);
+                console.log("MIGRATION SUCCESS: Record now indexed by UID.");
+              }
+            } catch (err) {
+              console.error("Migration check failed:", err);
+            }
+          }
+
+          // If STILL not found, initialize new user state
+          if (!userData) {
+            userData = { uid: fbUser.uid, email: fbUser.email, status: 'pending' };
+          }
+
+          // 2. Determine Screen
           const path = window.location.pathname;
           const isAdminPath = path.startsWith('/admin');
           const isAdminMode = localStorage.getItem('admin_mode') === 'true';

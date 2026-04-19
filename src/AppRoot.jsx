@@ -123,11 +123,11 @@ export default function AppRoot() {
   // Sync Bikes & Docks from Firestore
   useEffect(() => {
     const unsubBikes = onSnapshot(collection(db, "bikes"), (snap) => {
-      const bikesArr = snap.docs.map(d => d.data());
+      const bikesArr = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       setState(s => ({ ...s, bikes: bikesArr }));
     });
     const unsubDocks = onSnapshot(collection(db, "docks"), (snap) => {
-      const docksArr = snap.docs.map(d => d.data());
+      const docksArr = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       setState(s => ({ ...s, docks: docksArr }));
     });
     
@@ -135,7 +135,7 @@ export default function AppRoot() {
     let unsubUsers = () => {};
     if (state.isAdminMode) {
       unsubUsers = onSnapshot(collection(db, "users"), (snap) => {
-        const usersArr = snap.docs.map(d => d.data());
+        const usersArr = snap.docs.map(d => ({ id: d.id, ...d.data() }));
         setState(s => ({ ...s, users: usersArr }));
       });
     }

@@ -37,7 +37,9 @@ export default
 
   // Start the Triple Handshake (GPS -> BLE -> Initialize Camera)
   async function initiateSensorGate(isManual = false) {
-    if (!state.user?.paymentMethod || state.user?.paymentMethod?.type !== 'Vodafone Cash' || !state.user?.paymentMethod?.number) {
+    const isTestBike = initialTargetId === 'B-LOCAL' || initialTargetId === 'B-TEST';
+    
+    if (!isTestBike && (!state.user?.paymentMethod || state.user?.paymentMethod?.type !== 'Vodafone Cash' || !state.user?.paymentMethod?.number)) {
       setError("Please add your Vodafone Cash number in your Profile before starting a ride.");
       setHandshakeStep("idle");
       return;
@@ -62,8 +64,6 @@ export default
       const dist = targetBike ? calculateDistance(pos.coords.latitude, pos.coords.longitude, targetBike.lat, targetBike.lng) : Infinity;
       const isTestBike = targetBike?.id === 'B-LOCAL' || targetBike?.id === 'B-TEST';
 
-      await new Promise(r => setTimeout(r, 800)); // Sim delay
-
       if (!isTestBike && dist > 20) {
         setError("You must be within 20 meters of the bike to unlock it.");
         setHandshakeStep("idle");
@@ -72,7 +72,7 @@ export default
 
       // Step 2: Bluetooth (BLE) Handshake
       setHandshakeStep("ble");
-      const bleSuccess = await simulateBluetoothScan(targetBike?.id);
+      const bleSuccess = isTestBike ? true : await simulateBluetoothScan(targetBike?.id);
       if (!bleSuccess) {
         setError("Please stay close to the bike and ensure Bluetooth is on to unlock.");
         setHandshakeStep("idle");
@@ -192,7 +192,9 @@ export default
   function submitManualId() {
     if (!manualId || manualId.trim().length === 0) return;
     
-    if (!state.user?.paymentMethod || state.user?.paymentMethod?.type !== 'Vodafone Cash' || !state.user?.paymentMethod?.number) {
+    const isTestBike = manualId.trim() === 'B-LOCAL' || manualId.trim() === 'B-TEST';
+    
+    if (!isTestBike && (!state.user?.paymentMethod || state.user?.paymentMethod?.type !== 'Vodafone Cash' || !state.user?.paymentMethod?.number)) {
       setError("Please add your Vodafone Cash number in your Profile before starting a ride.");
       setHandshakeStep("idle");
       return;

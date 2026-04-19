@@ -148,7 +148,7 @@ export default
       });
     };
 
-    const bikesToShow = (bikes.length > 0 ? bikes : DAMIETTA_BIKES).filter(b => !b.locked);
+    const bikesToShow = (bikes.length > 0 ? bikes : DAMIETTA_BIKES);
     bikesToShow.forEach((b) => {
       if (!b.lat || !b.lng) return;
       L.marker([b.lat, b.lng], { icon: bikeIcon(selectedBike === b.id, b.status) })

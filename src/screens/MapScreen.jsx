@@ -11,7 +11,9 @@ export default
   function MapScreen({ navigate, state, setState }) {
   const [selectedBike, setSelectedBike] = useState(null);
   // Handle bike object lookup derived from selected ID
-  const selectedBikeObj = state.bikes?.find(b => b.id === selectedBike) || null;
+  const selectedBikeObj = state.bikes?.find(b => b.id === selectedBike) || DAMIETTA_BIKES.find(b => b.id === selectedBike) || null;
+
+  console.log("MapScreen check ->", "selectedBike:", selectedBike, "selectedBikeObj:", selectedBikeObj);
   const [showDrawer, setShowDrawer] = useState(false);
   const [userLocation, setUserLocation] = useState(null);
   const [timeLeft, setTimeLeft] = useState(0);

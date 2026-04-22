@@ -165,27 +165,46 @@ export default
     const bikeIdMatch = code.match(/(?:QR|MANUAL)-(.*)/);
     const resolvedBikeId = bikeIdMatch ? bikeIdMatch[1] : (initialTargetId || 'B-LOCAL');
 
-    // Find the dock that holds this bike
-    const dock = state.docks?.find(d => d.occupiedBy === resolvedBikeId) || state.docks?.[0]; // Fallback to dock 1 for demo if needed
-
-    if (dock) {
-      // Send ESP32 Servo Unlock explicitly to the dock
-      await simulateDockUnlock(dock.id);
-
-      // Update global state: dock is empty, bike is unlocked, and record startDockName
+    if (state.user?.activeRide?.status === 'paid_pending_scan') {
+      // User has already paid for this session, proceed with physical unlock
+      const dock = state.docks?.find(d => d.occupiedBy === resolvedBikeId) || state.docks?.[0]; // Fallback to dock 1 for demo if needed
+  
+      if (dock) {
+        // Send ESP32 Servo Unlock explicitly to the dock
+        await simulateDockUnlock(dock.id);
+  
+        // Update global state: dock is empty, bike is unlocked, start timer, and start ride
+        if (typeof setState === 'function') {
+          setState(s => ({
+            ...s,
+            selectedBike: s.bikes.find(b => b.id === resolvedBikeId) || { id: resolvedBikeId },
+            user: { 
+              ...s.user, 
+              startDockName: dock.name,
+              activeRide: {
+                ...s.user.activeRide,
+                status: 'active',
+                startTime: Date.now(),
+                bikeId: resolvedBikeId
+              }
+            },
+            docks: s.docks.map(d => d.occupiedBy === resolvedBikeId || d.id === dock.id ? { ...d, occupiedBy: null, servoPos: 10 } : d),
+            bikes: s.bikes.map(b => b.id === resolvedBikeId ? { ...b, locked: false } : b)
+          }));
+        }
+      }
+      navigate('riding');
+    } else {
+      // User hasn't paid yet. They just scanned the QR to select a bike.
       if (typeof setState === 'function') {
         setState(s => ({
           ...s,
-          selectedBike: s.bikes.find(b => b.id === resolvedBikeId) || { id: resolvedBikeId },
-          user: { ...s.user, startDockName: dock.name },
-          docks: s.docks.map(d => d.occupiedBy === resolvedBikeId || d.id === dock.id ? { ...d, occupiedBy: null, servoPos: 10 } : d),
-          bikes: s.bikes.map(b => b.id === resolvedBikeId ? { ...b, locked: false } : b)
+          selectedBike: s.bikes.find(b => b.id === resolvedBikeId) || { id: resolvedBikeId }
         }));
       }
+      // Navigate to duration selection (reserve screen) to pay first!
+      navigate('reserve');
     }
-
-    // Navigate immediately after servo triggers — timer starts on RidingScreen mount
-    navigate('riding');
   }
 
   // Secure Manual Input fallback submission (ALSO executes Triple Handshake!)

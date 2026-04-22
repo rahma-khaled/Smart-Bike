@@ -444,3 +444,11 @@ export const MaximizeIcon = ({ size = 20, color = "#111", style = {} }) => (
     <path d="M3 21l7-7" />
   </svg>
 );
+
+export const InfoIcon = ({ size = 20, color = "#111", style = {} }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={style}>
+    <circle cx="12" cy="12" r="10" />
+    <line x1="12" y1="16" x2="12" y2="12" />
+    <line x1="12" y1="8" x2="12.01" y2="8" />
+  </svg>
+);

@@ -6,6 +6,8 @@ import BackBtn from '../components/common/BackBtn';
 import LeafletMap from '../features/telemetry/LeafletMap';
 import { DAMIETTA_BIKES, DAMIETTA_GEOFENCE, pointInPolygon } from '../features/telemetry/geofence';
 import { calculateDistance, simulateBluetoothScan } from '../features/telemetry/SensorGate.js';
+import { doc, updateDoc } from 'firebase/firestore';
+import { db } from '../firebase.js';
 
 export default
   function MapScreen({ navigate, state, setState }) {
@@ -66,18 +68,16 @@ export default
     };
   }, []);
 
-  // Pass ALL bikes from state (they already have real dock lat/lng from AppRoot init)
-  const displayBikes = React.useMemo(() => {
-    return (state.bikes || []);
-  }, [state.bikes]);
+  const displayBikes = state.bikes || [];
+  const displayDocks = state.docks || [];
 
   return (
     <div style={{ height: "100%", display: "flex", flexDirection: "column", background: "#fff" }}>
       {/* 60% Map Height - Locked with Z-Index for Mobile */}
-      <div style={{ height: selectedBikeObj !== null ? '55dvh' : '100dvh', position: "relative", zIndex: 1, flex: selectedBikeObj !== null ? 'none' : 1, transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)' }}>
+      <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: selectedBikeObj !== null ? '55%' : '100%', zIndex: 1, backgroundColor: '#e8eaf0', transition: 'height 0.4s cubic-bezier(0.4, 0, 0.2, 1)' }}>
         <LeafletMap
           bikes={displayBikes}
-          docks={state.docks}
+          docks={displayDocks}
           onBikeClick={id => {
             // No longer navigating to scan immediately.
             // Always show the info drawer first.
@@ -153,6 +153,24 @@ export default
         </button>
         <button style={btnBoxStyle} aria-label="Refresh map" onClick={() => { console.log("Refreshing bikes..."); window.location.reload(); }}>
           <Icons.RefreshIcon size={20} />
+        </button>
+        <button 
+          style={{ ...btnBoxStyle, background: DARK }} 
+          title="Deploy Test Dock Here"
+          onClick={async () => {
+            if (!userLocation) return alert("Location unknown!");
+            if (window.confirm("Pin the Test Dock & Bike to your current GPS location?")) {
+              try {
+                await updateDoc(doc(db, "docks", "DOCK-DU-01"), { lat: userLocation.lat, lng: userLocation.lng });
+                await updateDoc(doc(db, "bikes", "B-LOCAL"), { lat: userLocation.lat, lng: userLocation.lng });
+                alert("Dock & Bike successfully pinned to this physical location!");
+              } catch (e) {
+                alert("Failed: " + e.message);
+              }
+            }
+          }}
+        >
+          <Icons.ShieldCheckIcon size={20} color={LIME} />
         </button>
       </div>
 
@@ -346,26 +364,11 @@ export default
               onClick={() => {
                 const bike = selectedBikeObj;
                 setState(s => ({ ...s, selectedBike: bike }));
-                navigate("scanQR");
-              }}
-            >
-              <Icons.QRScanIcon size={22} color={DARK} />
-              Scan To Unlock
-            </button>
-
-            <button
-              className="btn-outline"
-              style={{
-                height: 54, borderRadius: 16, border: '1.5px solid #111', color: DARK,
-                fontWeight: 800, fontSize: 16, background: 'transparent', cursor: 'pointer'
-              }}
-              onClick={() => {
-                const bike = selectedBikeObj;
-                setState(s => ({ ...s, selectedBike: bike }));
                 navigate("reserve");
               }}
             >
-              Reserve
+              <Icons.WalletIcon size={22} color={DARK} />
+              Select Time & Pay First
             </button>
           </div>
         </div>
@@ -381,9 +384,7 @@ export default
                 style={{ display: "flex", alignItems: "center", gap: 16, cursor: "pointer" }}
                 onClick={() => {
                   setShowDrawer(false);
-                  localStorage.setItem('admin_mode', 'true');
-                  setState(s => ({ ...s, isAdminMode: true }));
-                  navigate('adminDashboard');
+                  navigate('profile');
                 }}
               >
                 <div style={{ width: 72, height: 72, background: DARK, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", border: '4px solid white' }}>
@@ -402,7 +403,7 @@ export default
             <div style={{ padding: "24px 0" }}>
               {[
                 { icon: <Icons.BikeIconSVG size={22} color={DARK} />, label: "My Rides", screen: "history" },
-                { icon: <Icons.WalletIcon size={22} color={DARK} />, label: "Payment Methods", screen: "wallet" },
+                { icon: <Icons.WalletIcon size={22} color={DARK} />, label: "Payment Methods", screen: "editProfile" },
                 { icon: <Icons.HelpCircleIcon size={22} color={DARK} />, label: "How to Ride", screen: "howToRide" },
                 { icon: <Icons.UserSettingsIcon size={22} color={DARK} />, label: "Settings", screen: "settings" },
                 { icon: <Icons.AlertIcon size={22} color="#f44336" />, label: "Report Issue", screen: "reportIssue" },

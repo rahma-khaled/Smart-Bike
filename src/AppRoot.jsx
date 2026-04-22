@@ -123,11 +123,13 @@ export default function AppRoot() {
   // Sync Bikes & Docks from Firestore
   useEffect(() => {
     const unsubBikes = onSnapshot(collection(db, "bikes"), (snap) => {
-      const bikesArr = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      // FOR TESTING: Only show the physical IoT test bike
+      const bikesArr = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(b => b.id === 'B-LOCAL');
       setState(s => ({ ...s, bikes: bikesArr }));
     });
     const unsubDocks = onSnapshot(collection(db, "docks"), (snap) => {
-      const docksArr = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      // FOR TESTING: Only show the physical IoT test dock
+      const docksArr = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(d => d.id === 'DOCK-DU-01').map(d => ({ ...d, name: 'IOT Hardware Dock' }));
       setState(s => ({ ...s, docks: docksArr }));
     });
     

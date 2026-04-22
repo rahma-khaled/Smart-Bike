@@ -33,8 +33,8 @@ function ProfileScreen({ navigate, state, setState }) {
     navigate('welcome');
   }
 
-  const fieldRow = (icon, label, value, badge, forceShow = false) => (value || forceShow) ? (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 0', borderBottom: '1px solid #f0f0f0' }}>
+  const fieldRow = (icon, label, value, badge, forceShow = false, onClick = null) => (value || forceShow) ? (
+    <div onClick={onClick} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 0', borderBottom: '1px solid #f0f0f0', cursor: onClick ? 'pointer' : 'default' }}>
       <div style={{ width: 36, height: 36, borderRadius: 10, background: '#f5f5f5', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
         {icon}
       </div>
@@ -43,6 +43,7 @@ function ProfileScreen({ navigate, state, setState }) {
         <div style={{ fontSize: 15, fontWeight: 600, color: DARK, marginTop: 2 }}>{value || 'Not Configured'}</div>
       </div>
       {badge}
+      {onClick && <Icons.ChevronRightIcon size={16} color="#ccc" />}
     </div>
   ) : null;
 
@@ -100,7 +101,8 @@ function ProfileScreen({ navigate, state, setState }) {
                 <Icons.AlertTriangleIcon size={12} color="#f44336" /> Add Vodafone Cash number to enable rentals
               </div>
             ),
-            true // Force show!
+            true, // Force show!
+            () => navigate('editProfile')
           )}
         </div>
 

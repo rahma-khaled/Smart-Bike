@@ -4,9 +4,11 @@ import * as Icons from '../assets/Icons.jsx';
 import LeafletMap from '../features/telemetry/LeafletMap';
 import localforage from 'localforage';
 import { simulateDockLock, calculateDistance } from '../features/telemetry/SensorGate.js';
+import { doc, getDoc, updateDoc } from 'firebase/firestore';
+import { db } from '../firebase.js';
 
 const FINE_RATE_PER_MIN = 1.0;
-const SOS_NUMBER   = "+201022094608";
+const SOS_NUMBER = "+201022094608";
 const DK = '#1a1a2e';  // dark bg
 const DK2 = '#16213e'; // darker card
 const ACC = '#e94560';  // accent red
@@ -54,6 +56,9 @@ export default function RidingScreen({ navigate, state, setState }) {
   const [finalSeconds, setFinalSeconds] = useState(null);
   const [finalKm, setFinalKm] = useState(null);
 
+  const [columnIdInput, setColumnIdInput] = useState('');
+  const [verifyingColumn, setVerifyingColumn] = useState(false);
+
   // ── Access guard ──
   useEffect(() => {
     if (state.user?.status && state.user.status !== 'verified') {
@@ -95,7 +100,7 @@ export default function RidingScreen({ navigate, state, setState }) {
             prevLocRef.current = { lat, lng };
             setState(s => ({ ...s, bikes: (s.bikes || []).map(b => b.id === s.selectedBike?.id ? { ...b, lat, lng } : b) }));
           },
-          () => {},
+          () => { },
           { enableHighAccuracy: true, maximumAge: 2000 }
         );
       }
@@ -118,44 +123,102 @@ export default function RidingScreen({ navigate, state, setState }) {
   // ═══════════════════════════════════════════════════════
 
   function handleEndRide() {
-    setCheckingZone(true);
-    setFinalSeconds(elapsedSeconds);
-    setFinalKm(distanceKm);
-    rideActive.current = false;
-    clearInterval(timerRef.current);
+    setEndStep('enter_column_id');
+  }
 
-    setTimeout(async () => {
-      setCheckingZone(false);
-      
-      const emptyDock = state.docks?.find(d => !d.occupiedBy) || state.docks?.[0];
-      if (emptyDock) {
-        await simulateDockLock(emptyDock.id);
-        setState(s => ({
-          ...s,
-          docks: s.docks.map(d => 
-            d.id === emptyDock.id 
-              ? { ...d, occupiedBy: s.selectedBike?.id || 'B-LOCAL', servoPos: 170 } 
-              : (d.occupiedBy === (s.selectedBike?.id || 'B-LOCAL') ? { ...d, occupiedBy: null } : d)
-          ),
-          bikes: s.bikes.map(b => b.id === (s.selectedBike?.id || 'B-LOCAL') ? { ...b, locked: true, lat: emptyDock.lat, lng: emptyDock.lng } : b)
-        }));
+  async function submitColumnId(enteredId) {
+    if (!enteredId || enteredId.trim() === '') {
+      setToast({ message: "Please enter a valid Column ID." });
+      return;
+    }
+
+    setVerifyingColumn(true);
+    const dockId = enteredId.toUpperCase().trim();
+
+    try {
+      const dockRef = doc(db, "docks", dockId);
+      const dockSnap = await getDoc(dockRef);
+
+      if (!dockSnap.exists()) {
+        setToast({ message: "Invalid Column ID. Please check the LCD." });
+        setVerifyingColumn(false);
+        return;
       }
+
+      const dockData = dockSnap.data();
+      const bikeId = state.selectedBike?.id || 'B-LOCAL';
+
+      if (dockData.occupiedBy && dockData.occupiedBy !== bikeId) {
+        setToast({ message: "This column is occupied by another bike." });
+        setVerifyingColumn(false);
+        return;
+      }
+
+      // Freeze values
+      setFinalSeconds(elapsedSeconds);
+      setFinalKm(distanceKm);
+      rideActive.current = false;
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+      }
+
+      setEndStep('verifying_lock');
+
+      // Simulate physical lock
+      await simulateDockLock(dockId);
+
+      // Update Firestore: Dock status
+      await updateDoc(dockRef, {
+        occupiedBy: bikeId,
+        servoPos: 170
+      });
+
+      // Update Firestore: Bike status and coords
+      const bikeRef = doc(db, "bikes", bikeId);
+      await updateDoc(bikeRef, {
+        locked: true,
+        lat: dockData.lat || 31.4398,
+        lng: dockData.lng || 31.6705
+      });
+
+      // Release any other docks previously occupied by this bike (clean-up)
+      const otherDocks = state.docks?.filter(d => d.occupiedBy === bikeId && d.id !== dockId) || [];
+      for (const od of otherDocks) {
+        await updateDoc(doc(db, "docks", od.id), { occupiedBy: null, servoPos: 10 });
+      }
+
+      // Update local React state to reflect database changes
+      setState(s => ({
+        ...s,
+        docks: (s.docks || []).map(d =>
+          d.id === dockId
+            ? { ...d, occupiedBy: bikeId, servoPos: 170 }
+            : (d.occupiedBy === bikeId ? { ...d, occupiedBy: null, servoPos: 10 } : d)
+        ),
+        bikes: (s.bikes || []).map(b => b.id === bikeId ? { ...b, locked: true, lat: dockData.lat, lng: dockData.lng } : b)
+      }));
+
       setEndStep('verify_start');
-    }, 1000);
+    } catch (err) {
+      console.error("Error verifying Column ID or locking:", err);
+      setToast({ message: "Verification failed. Try again." });
+    } finally {
+      setVerifyingColumn(false);
+    }
   }
 
   function takePhotoCheck() {
     setEndStep('verify_ai');
-    
+
     setTimeout(async () => {
       try {
         const logs = await localforage.getItem('admin_logs') || [];
-        logs.unshift({ 
-          timestamp: new Date().toISOString(), 
-          operator: state.user?.name || state.user?.phone || 'AI Vision', 
-          action: 'AI_PHOTO_VERIFICATION', 
-          details: `Verified bike ${state.selectedBike?.id || 'B-LOCAL'} is locked properly.`, 
-          isSystem: true 
+        logs.unshift({
+          timestamp: new Date().toISOString(),
+          operator: state.user?.name || state.user?.phone || 'AI Vision',
+          action: 'AI_PHOTO_VERIFICATION',
+          details: `Verified bike ${state.selectedBike?.id || 'B-LOCAL'} is locked properly.`,
+          isSystem: true
         });
         await localforage.setItem('admin_logs', logs);
       } catch (e) {
@@ -238,7 +301,7 @@ export default function RidingScreen({ navigate, state, setState }) {
       const logs = await localforage.getItem('admin_logs') || [];
       logs.unshift({ timestamp: new Date().toISOString(), operator: state.user?.name || state.user?.phone || 'Unknown', action: 'EMERGENCY SOS TRIGGERED', details: `Coordinates: [${lat}, ${lng}]`, isSystem: true });
       await localforage.setItem('admin_logs', logs);
-    } catch (e) {}
+    } catch (e) { }
     window.location.href = `tel:${SOS_NUMBER}`;
   }
 
@@ -267,7 +330,7 @@ export default function RidingScreen({ navigate, state, setState }) {
           text: text,
           url: url
         });
-      } catch (err) {}
+      } catch (err) { }
     } else {
       setToast({ message: `Share via ${platform} not supported on this device.` });
       setTimeout(() => setToast(null), 3000);
@@ -280,12 +343,12 @@ export default function RidingScreen({ navigate, state, setState }) {
   const accentBtn = (disabled) => ({ width: '100%', height: 52, borderRadius: 14, background: disabled ? '#f0f0f0' : ACC, color: disabled ? '#aaa' : 'white', border: 'none', fontWeight: 800, fontSize: 15, cursor: disabled ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontFamily: "'Space Grotesk', sans-serif", transition: 'all 0.2s' });
   const limeBtn = (disabled) => ({ ...accentBtn(disabled), background: disabled ? '#f0f0f0' : LIME, color: disabled ? '#aaa' : DARK });
   const outlineBtn = { width: '100%', height: 52, borderRadius: 14, background: 'transparent', color: '#ccc', border: '1px solid rgba(255,255,255,0.2)', fontWeight: 600, fontSize: 14, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontFamily: "'Space Grotesk', sans-serif" };
-  const FlashlightIcon = () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v4a2 2 0 0 0 2 2h8.5L10 22v-8H6"/></svg>;
+  const FlashlightIcon = () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v4a2 2 0 0 0 2 2h8.5L10 22v-8H6" /></svg>;
 
   // ─── RENDER ─────────────────────────────────────────────────────────────────
   return (
     <div style={{ height: "100%", display: "flex", flexDirection: "column", background: isOvertime ? '#fff1f1' : "#fff", position: 'relative', overflow: 'hidden', transition: 'background 0.5s' }}>
-      
+
       {/* Toast Notification */}
       {toast && (
         <div style={{
@@ -302,15 +365,15 @@ export default function RidingScreen({ navigate, state, setState }) {
 
       {/* Buzzer Alert Header */}
       {isOvertime && (
-        <div style={{ 
-          background: '#FF3B30', color: 'white', padding: '8px 16px', textAlign: 'center', 
+        <div style={{
+          background: '#FF3B30', color: 'white', padding: '8px 16px', textAlign: 'center',
           fontWeight: 900, fontSize: 14, fontFamily: "'Space Grotesk',sans-serif",
           animation: 'pulseRed 1s infinite', zIndex: 100
         }}>
           ⚠️ OVERTIME: {fmtTime(overtimeSecs)} (Fine Active)
         </div>
       )}
-      
+
       {/* ── 1. Map (Full Screen) ── */}
       <div style={{ position: "absolute", inset: 0, zIndex: 0 }}>
         <LeafletMap bikes={[]} docks={state.docks} userLocation={userLocation} followUser={true} />
@@ -318,90 +381,166 @@ export default function RidingScreen({ navigate, state, setState }) {
 
       {/* ── 2. Top UI Layer (Floating) ── */}
       <div style={{ position: "absolute", top: 16, left: 16, right: 16, zIndex: 10, display: "flex", flexDirection: "column", gap: 16, pointerEvents: 'none' }}>
-        
+
         {/* Navigation / Status Bar */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", pointerEvents: 'auto' }}>
-           <button style={{ width: 44, height: 44, borderRadius: 12, background: "white", border: "none", cursor: "pointer", display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 15px rgba(0,0,0,0.1)' }} onClick={() => setShowShare(true)}>
-             <Icons.MenuIcon size={22} color={DARK} />
-           </button>
-           <div style={{ background: isOvertime ? '#FF3B30' : LIME, color: isOvertime ? 'white' : DARK, borderRadius: 12, padding: "10px 18px", display: "flex", alignItems: "center", gap: 8, fontWeight: 800, fontSize: 13, fontFamily: "'Space Grotesk',sans-serif", boxShadow: '0 6px 20px rgba(0,0,0,0.15)' }}>
-             <span style={{ width: 8, height: 8, background: isOvertime ? 'white' : DARK, borderRadius: "50%", animation: 'pulse 1.5s infinite' }} />
-             {isOvertime ? 'Overtime Active' : 'Ride in Progress'}
-           </div>
-           <div style={{ width: 44 }}></div> {/* spacer */}
+          <button style={{ width: 44, height: 44, borderRadius: 12, background: "white", border: "none", cursor: "pointer", display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 15px rgba(0,0,0,0.1)' }} onClick={() => setShowShare(true)}>
+            <Icons.MenuIcon size={22} color={DARK} />
+          </button>
+          <div style={{ background: isOvertime ? '#FF3B30' : LIME, color: isOvertime ? 'white' : DARK, borderRadius: 12, padding: "10px 18px", display: "flex", alignItems: "center", gap: 8, fontWeight: 800, fontSize: 13, fontFamily: "'Space Grotesk',sans-serif", boxShadow: '0 6px 20px rgba(0,0,0,0.15)' }}>
+            <span style={{ width: 8, height: 8, background: isOvertime ? 'white' : DARK, borderRadius: "50%", animation: 'pulse 1.5s infinite' }} />
+            {isOvertime ? 'Overtime Active' : 'Ride in Progress'}
+          </div>
+          <div style={{ width: 44 }}></div> {/* spacer */}
         </div>
 
         {/* Floating Stats Card */}
         <div style={{ background: "white", borderRadius: 24, padding: "24px 20px", boxShadow: "0 10px 40px rgba(0,0,0,0.12)", pointerEvents: 'auto' }}>
-           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                 <div style={{ width: 38, height: 38, borderRadius: 50, background: isOvertime ? '#ffebeb' : '#f4f5f7', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                   <Icons.ClockIcon size={18} color={isOvertime ? '#FF3B30' : DARK} />
-                 </div>
-                 <div>
-                   <div style={{ fontSize: 11, color: "#888", fontWeight: 700 }}>{isOvertime ? 'Extra Time' : 'Time Left'}</div>
-                   <div style={{ fontSize: 18, fontWeight: 900, fontFamily: "'Space Grotesk',sans-serif", color: isOvertime ? '#FF3B30' : DARK }}>
-                     {isOvertime ? `+${fmtTime(overtimeSecs)}` : fmtTime(timeLeft)}
-                   </div>
-                 </div>
-              </div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
 
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                 <div style={{ width: 38, height: 38, borderRadius: 50, background: '#eaf4ff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                   <Icons.LocationIcon size={18} color="#007AFF" />
-                 </div>
-                 <div>
-                   <div style={{ fontSize: 11, color: "#888", fontWeight: 700 }}>Distance</div>
-                   <div style={{ fontSize: 18, fontWeight: 900, fontFamily: "'Space Grotesk',sans-serif", color: DARK }}>
-                     {fmtDist(displayKm)}
-                   </div>
-                 </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div style={{ width: 38, height: 38, borderRadius: 50, background: isOvertime ? '#ffebeb' : '#f4f5f7', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Icons.ClockIcon size={18} color={isOvertime ? '#FF3B30' : DARK} />
               </div>
-
-           </div>
-
-           {/* Progress Line */}
-           <div style={{ marginTop: 24, padding: '0 4px' }}>
-              <div style={{ height: 4, background: '#f0f0f0', borderRadius: 4, width: '100%', position: 'relative', overflow: 'hidden' }}>
-                 <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: `${Math.min(100, Math.max(0, 100 - (timeLeft/(30*60000))*100))}%`, background: DARK, borderRadius: 4, transition: 'width 1s linear' }} />
+              <div>
+                <div style={{ fontSize: 11, color: "#888", fontWeight: 700 }}>{isOvertime ? 'Extra Time' : 'Time Left'}</div>
+                <div style={{ fontSize: 18, fontWeight: 900, fontFamily: "'Space Grotesk',sans-serif", color: isOvertime ? '#FF3B30' : DARK }}>
+                  {isOvertime ? `+${fmtTime(overtimeSecs)}` : fmtTime(timeLeft)}
+                </div>
               </div>
-           </div>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div style={{ width: 38, height: 38, borderRadius: 50, background: '#eaf4ff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Icons.LocationIcon size={18} color="#007AFF" />
+              </div>
+              <div>
+                <div style={{ fontSize: 11, color: "#888", fontWeight: 700 }}>Distance</div>
+                <div style={{ fontSize: 18, fontWeight: 900, fontFamily: "'Space Grotesk',sans-serif", color: DARK }}>
+                  {fmtDist(displayKm)}
+                </div>
+              </div>
+            </div>
+
+          </div>
+
+          {/* Progress Line */}
+          <div style={{ marginTop: 24, padding: '0 4px' }}>
+            <div style={{ height: 4, background: '#f0f0f0', borderRadius: 4, width: '100%', position: 'relative', overflow: 'hidden' }}>
+              <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: `${Math.min(100, Math.max(0, 100 - (timeLeft / (30 * 60000)) * 100))}%`, background: DARK, borderRadius: 4, transition: 'width 1s linear' }} />
+            </div>
+          </div>
         </div>
       </div>
 
       {/* ── 3. Bottom UI Overlays (Floating Icons + Bottom Controls) ── */}
       <div style={{ position: "absolute", bottom: 180, left: 16, right: 16, display: "flex", justifyContent: "space-between", zIndex: 10, pointerEvents: 'none' }}>
         <button style={{ width: 44, height: 44, borderRadius: 50, background: LIME, border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', cursor: 'pointer', pointerEvents: 'auto' }} onClick={() => setShowShare(true)}>
-           <Icons.ShareIcon size={18} color={DARK} />
+          <Icons.ShareIcon size={18} color={DARK} />
         </button>
         <button style={{ width: 44, height: 44, borderRadius: 50, background: LIME, border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', cursor: 'pointer', pointerEvents: 'auto' }} onClick={handleSOS}>
-           <Icons.AlertTriangleIcon size={18} color={DARK} />
+          <Icons.AlertTriangleIcon size={18} color={DARK} />
         </button>
       </div>
 
       <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, background: "white", borderRadius: "32px 32px 0 0", padding: "24px 24px 32px", display: "flex", flexDirection: "column", gap: 14, zIndex: 10, boxShadow: "0 -10px 40px rgba(0,0,0,0.08)" }}>
-         <button 
-           style={{ width: '100%', height: 56, borderRadius: 14, background: checkingZone ? '#999' : '#e60000', color: 'white', fontWeight: 800, fontSize: 16, border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, cursor: checkingZone ? 'not-allowed' : 'pointer', fontFamily: "'Space Grotesk',sans-serif", transition: 'all 0.2s', boxShadow: '0 4px 15px rgba(230,0,0,0.3)' }} 
-           onClick={handleEndRide} 
-           disabled={checkingZone}
-         >
-           {checkingZone ? (<><div style={{ width: 16, height: 16, border: '2.5px solid rgba(255,255,255,0.3)', borderTopColor: 'white', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />Wait...</>) : "End Ride"}
-         </button>
+        <button
+          style={{ width: '100%', height: 56, borderRadius: 14, background: checkingZone ? '#999' : '#e60000', color: 'white', fontWeight: 800, fontSize: 16, border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, cursor: checkingZone ? 'not-allowed' : 'pointer', fontFamily: "'Space Grotesk',sans-serif", transition: 'all 0.2s', boxShadow: '0 4px 15px rgba(230,0,0,0.3)' }}
+          onClick={handleEndRide}
+          disabled={checkingZone}
+        >
+          {checkingZone ? (<><div style={{ width: 16, height: 16, border: '2.5px solid rgba(255,255,255,0.3)', borderTopColor: 'white', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />Wait...</>) : "End Ride"}
+        </button>
 
-         <button 
-           style={{ width: '100%', height: 56, borderRadius: 14, background: "white", color: DARK, fontWeight: 800, fontSize: 16, border: '2px solid #111', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, cursor: 'pointer', fontFamily: "'Space Grotesk',sans-serif", transition: 'all 0.2s' }} 
-         >
-           <Icons.LockIcon size={18} color={DARK} /> Pause & Lock
-         </button>
+        <button
+          style={{ width: '100%', height: 56, borderRadius: 14, background: "white", color: DARK, fontWeight: 800, fontSize: 16, border: '2px solid #111', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, cursor: 'pointer', fontFamily: "'Space Grotesk',sans-serif", transition: 'all 0.2s' }}
+        >
+          <Icons.LockIcon size={18} color={DARK} /> Pause & Lock
+        </button>
       </div>
 
       {/* ══════════════════════════════════════════════════════════════
-          VERIFICATION FLOW (Screens 1 to 4)
+          COLUMN ID LOCK FLOW
       ══════════════════════════════════════════════════════════════ */}
+      {endStep === 'enter_column_id' && (
+        <div style={{ position: 'absolute', inset: 0, background: 'rgba(17,17,30,0.95)', backdropFilter: 'blur(10px)', zIndex: 600, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', padding: 24, fontFamily: "'Space Grotesk', sans-serif" }}>
+          <div style={{ width: '100%', maxWidth: 360, background: 'white', borderRadius: 24, padding: '32px 24px', display: 'flex', flexDirection: 'column', alignItems: 'center', color: DARK, boxShadow: '0 20px 50px rgba(0,0,0,0.4)', animation: 'slideUpMap 0.35s ease-out' }}>
+            <div style={{ width: 64, height: 64, borderRadius: '50%', background: '#f5ffcc', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 20 }}>
+              <Icons.LockIcon size={28} color={DARK} />
+            </div>
+
+            <h2 style={{ fontSize: 20, fontWeight: 900, marginBottom: 8, textAlign: 'center' }}>
+              Lock Bike
+            </h2>
+            <p style={{ color: '#666', fontSize: 13, textAlign: 'center', marginBottom: 24, lineHeight: 1.5 }}>
+              Enter the Column ID displayed on the LCD screen of the dock you are locking the bike at.
+            </p>
+
+            <input
+              type="text"
+              placeholder="e.g. Station_XXX"
+              value={columnIdInput}
+              onChange={e => setColumnIdInput(e.target.value.toUpperCase())}
+              style={{
+                width: '100%',
+                boxSizing: 'border-box',
+                padding: '16px',
+                borderRadius: 14,
+                border: '2px solid #ddd',
+                background: '#f9f9fb',
+                color: DARK,
+                fontSize: 16,
+                fontWeight: 800,
+                textAlign: 'center',
+                letterSpacing: 1.5,
+                textTransform: 'uppercase',
+                marginBottom: 20,
+                outline: 'none',
+                transition: 'border-color 0.2s'
+              }}
+            />
+
+            <button
+              style={{ ...limeBtn(verifyingColumn), height: 50, marginBottom: 12 }}
+              onClick={() => submitColumnId(columnIdInput)}
+              disabled={verifyingColumn || !columnIdInput}
+            >
+              {verifyingColumn ? 'Verifying...' : 'Verify & Lock'}
+            </button>
+
+            <button
+              style={{ ...outlineBtn, color: '#666', borderColor: '#ddd', height: 50 }}
+              onClick={() => {
+                setEndStep(null);
+                setColumnIdInput('');
+              }}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {endStep === 'verifying_lock' && (
+        <div style={{ position: 'absolute', inset: 0, background: 'rgba(17,17,30,0.95)', backdropFilter: 'blur(10px)', zIndex: 600, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 24, fontFamily: "'Space Grotesk', sans-serif" }}>
+          <div className="spinner" style={{ marginBottom: 20, width: 48, height: 48, border: '4px solid rgba(204,255,0,0.3)', borderTopColor: LIME }} />
+          <div style={{ color: "white", fontSize: 18, fontWeight: 800, marginBottom: 8, textAlign: 'center' }}>
+            Securing Lock...
+          </div>
+          <p style={{ color: '#ccc', fontSize: 14, textAlign: 'center' }}>
+            Communicating with Column device to secure the physical lock.
+            <br />
+            جاري الاتصال بجهاز العمود لتأمين قفل الدراجة.
+          </p>
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════════════════════════════
+          VERIFICATION FLOW (Screens 1 to 4)
+          ══════════════════════════════════════════════════════════════ */}
       {(endStep?.startsWith('verify_')) && (
         <div style={{ position: 'absolute', inset: 0, background: '#111', zIndex: 500, display: 'flex', flexDirection: 'column', fontFamily: "'Space Grotesk', sans-serif", color: 'white', overflow: 'hidden' }}>
-          
+
           {/* Camera feed base */}
           {(endStep === 'verify_camera' || endStep === 'verify_warning') && (
             <video ref={videoRef} autoPlay playsInline style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', opacity: cameraStream ? 1 : 0, transition: 'opacity 0.3s' }} />
@@ -460,7 +599,7 @@ export default function RidingScreen({ navigate, state, setState }) {
                     <div style={{ color: DARK, fontSize: 32, fontWeight: 900 }}>!</div>
                   </div>
                   <div style={{ fontSize: 16, fontWeight: 900, marginBottom: 8 }}>Warning: Your bike is unlocked!</div>
-                  <p style={{ color: '#888', fontSize: 13, marginBottom: 24, lineHeight: 1.5 }}>Your bike is not secured.<br/>please lock it!</p>
+                  <p style={{ color: '#888', fontSize: 13, marginBottom: 24, lineHeight: 1.5 }}>Your bike is not secured.<br />please lock it!</p>
                   <button style={{ width: '100%', height: 48, borderRadius: 12, background: LIME, color: DARK, border: 'none', fontWeight: 800, fontSize: 14, cursor: 'pointer', fontFamily: "'Space Grotesk', sans-serif" }} onClick={() => setEndStep('verify_camera')}>
                     Retake photo
                   </button>
